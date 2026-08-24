@@ -1,0 +1,30 @@
+# ─── PocketBase ───────────────────────────────────────────────
+# La base. NO se commitea: son los datos reales del local.
+pb/pb_data/
+
+# El ejecutable (33 MB). Cada uno lo baja para su SO — ver pb/README.md
+pb/pocketbase
+pb/pocketbase.exe
+
+# Las migraciones SÍ van al repo (son el schema versionado).
+!pb/pb_migrations/
+!pb/pb_migrations/*.js
+
+# Backups que genera PocketBase
+pb/pb_data/backups/
+
+# ─── Node ─────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+
+# ─── SO / editor ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+
+# ─── Varios ───────────────────────────────────────────────────
+*.zip
+*.log
