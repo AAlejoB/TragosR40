@@ -20,6 +20,7 @@
 | 25 ago 2026 | **Bloque 2** — push inicial a GitHub. Diagnóstico de `[HOOKS]`: 9 agujeros medidos contra el servidor real y 3 opciones de arquitectura. **Frenado a propósito**: la decisión va al Chat. Ver [`DECISION-HOOKS.md`](DECISION-HOOKS.md). |
 | 25 ago 2026 | **Bloque 3** — `[HOOKS]` implementado según [`BRIEF-HOOKS.md`](BRIEF-HOOKS.md). Los 9 agujeros cerrados, `[CLAIM-TIMEOUT]` andando. La suite pasó de 52 a **92 chequeos, 0 fallas**. |
 | 25 ago 2026 | **Bloque 4** — `caja.html` y `barra.html` andando, con realtime. Probadas de punta a punta en el navegador: cobro, número gritable, tablero de la barra, anulación y caída del servidor. Sin PWA todavía. |
+| 25 ago 2026 | **Bloque 5** — red de seguridad contra el realtime zombi, latencia medida (**27 ms**), y `gestion.html`: el jefe edita su menú y sus precios sin tocar el panel técnico. |
 
 ---
 
@@ -459,6 +460,38 @@ La barra muestra en la cabecera **cuán fresco es lo que estás viendo**: dice
 "al día" si los datos son de hace menos de 20 segundos, y si pasa de 30 se pone
 en rojo con el tiempo real. El barman puede **mirar** y saber si la pantalla
 está viva, sin depender de que alguien le avise.
+
+---
+
+### Bloque 5 — Confiabilidad y el menú del jefe (25 ago 2026)
+
+>CLCODE<
+
+**Disparado por dos preguntas de Alejo:** *"¿cómo certificamos que es rápido?"*
+y *"¿qué pasa si el cliente compra pero no le llega al barman?"*.
+
+**Lo que encontró la segunda pregunta:** un agujero real. La barra sólo volvía a
+pedir los pedidos **cuando el server le avisaba**. Si ese aviso moría en silencio
+—la conexión sigue abierta pero deja de llegar nada, que no dispara ningún
+error— la barra mostraba una cola vieja para siempre. Un trago pagado que nadie
+prepara. Arreglado: ahora pregunta cada 15 segundos pase lo que pase, y muestra
+en la cabecera cuán fresco es lo que se ve.
+
+**Lo que contestó la primera:** ver § Qué tan rápido llega un pedido a la barra.
+27 ms de promedio, medidos.
+
+**`gestion.html` — el menú del jefe.** Agregar tragos, cambiar precios,
+reordenar, y apagar un producto de un toque cuando se acaba. No hace falta
+migración: el schema ya tenía `createRule`/`updateRule` en `rol = "jefe"`.
+
+**Borrar no existe a propósito.** `deleteRule` es `null` para todos: un producto
+borrado dejaría huérfanas las ventas viejas que lo referencian. Se apaga, no se
+borra.
+
+**Lo que hace seguro que el jefe toque precios en plena noche** es NO ROMPER #1:
+`precio_unit` se congela al cobrar. Se verificó explícitamente — se vendieron 2
+Fernet a $8.000, el jefe subió el Fernet a $15.000, y la venta vieja siguió
+valiendo $16.000. Un cajero, además, no puede cambiar precios.
 
 ---
 

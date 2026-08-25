@@ -15,6 +15,7 @@
 | Cómo hablan las pantallas con el server | [`web/js/pb.js`](web/js/pb.js) — cliente propio, sin CDN |
 | Cuánto tarda un pedido en llegar a la barra | [`docs/HISTORIA.md`](docs/HISTORIA.md) § Qué tan rápido — **27 ms medidos** |
 | Por qué el servidor valida lo que valida | [`docs/DECISION-HOOKS.md`](docs/DECISION-HOOKS.md) → [`docs/BRIEF-HOOKS.md`](docs/BRIEF-HOOKS.md) ✅ implementado |
+| Varias barras o varios locales | [`docs/DECISION-MULTILOCAL.md`](docs/DECISION-MULTILOCAL.md) ⏸ esperando al Chat |
 
 ---
 
@@ -82,6 +83,7 @@ tragos/
 │   ├── index.html          ← Elegí pantalla: caja o barra
 │   ├── caja.html           ← Pantalla del cajero
 │   ├── barra.html          ← Pantalla del barman
+│   ├── gestion.html        ← Menú y precios (sólo el jefe)
 │   ├── cliente.html        ← Auto-pedido (fase 2, todavía no existe)
 │   ├── sw.js               ← Service Worker (todavía no existe)
 │   ├── manifest.json       ← (todavía no existe)
@@ -90,17 +92,20 @@ tragos/
 │   │   ├── estados.js      ← Espejo de la máquina de estados del server
 │   │   ├── ui.js           ← Login, avisos, modales, indicador de conexión
 │   │   ├── caja.js
-│   │   └── barra.js
+│   │   ├── barra.js
+│   │   └── gestion.js
 │   └── css/
 │       └── styles.css
 └── docs/
     ├── MODELO-DATOS.md
     ├── HISTORIA.md
     ├── DECISION-HOOKS.md  ← Diagnóstico de los 9 agujeros (histórico)
-    └── BRIEF-HOOKS.md     ← La decisión del Chat. Implementada.
+    ├── BRIEF-HOOKS.md     ← La decisión del Chat. Implementada.
+    └── DECISION-MULTILOCAL.md ← Varias barras / varios locales. Abierto.
 ```
 
-Las pantallas se abren en `http://<ip-del-server>:8090/caja.html` y `/barra.html`.
+Las pantallas se abren en `http://<ip-del-server>:8090/caja.html`, `/barra.html`
+y `/gestion.html`.
 No hace falta configurar ninguna IP en el código: se sirven desde el mismo
 PocketBase, así que la API queda en el mismo origen.
 

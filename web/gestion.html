@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#0d0f12">
+  <title>Menú — Tragos</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <div class="app">
+    <header class="barra-sup">
+      <h1>MENÚ</h1>
+      <span class="quien" id="quien"></span>
+      <span class="espaciador"></span>
+      <div class="conexion" id="conexion">
+        <span class="punto"></span><span data-txt>Conectado</span>
+      </div>
+      <button class="btn btn-chico btn-fantasma" id="btn-salir">Salir</button>
+    </header>
+
+    <div class="alerta-caido" id="alerta-caido" style="display:none">
+      SIN CONEXIÓN CON EL SERVIDOR — los cambios no se van a guardar
+    </div>
+
+    <div class="tabs" id="tabs"></div>
+
+    <div class="scroll" id="lista"></div>
+  </div>
+
+  <button class="btn btn-accion btn-flotante" id="btn-nuevo">+ Agregar</button>
+
+  <script src="js/pb.js"></script>
+  <script src="js/estados.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/gestion.js"></script>
+</body>
+</html>
