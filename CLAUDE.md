@@ -12,6 +12,7 @@
 | Cómo arrancar, verificar, qué significa cada palabra | [`docs/HISTORIA.md`](docs/HISTORIA.md) § Manual de operación |
 | Qué modelo usar en cada bloque de trabajo | [`docs/HISTORIA.md`](docs/HISTORIA.md) § Qué modelo usar |
 | Instalar PocketBase en una máquina nueva | [`pb/README.md`](pb/README.md) |
+| Cómo hablan las pantallas con el server | [`web/js/pb.js`](web/js/pb.js) — cliente propio, sin CDN |
 | Por qué el servidor valida lo que valida | [`docs/DECISION-HOOKS.md`](docs/DECISION-HOOKS.md) → [`docs/BRIEF-HOOKS.md`](docs/BRIEF-HOOKS.md) ✅ implementado |
 
 ---
@@ -76,15 +77,17 @@ tragos/
 │   │   └── utils.js        ← Helpers (NO .pb.js: es módulo, no hook)
 │   ├── verificar.mjs       ← Suite de 92 chequeos (node, sin deps)
 │   └── README.md           ← Cómo instalar y arrancar PocketBase
-├── web/
+├── web/                    ← Lo sirve PocketBase (--publicDir en arrancar.cmd)
+│   ├── index.html          ← Elegí pantalla: caja o barra
 │   ├── caja.html           ← Pantalla del cajero
 │   ├── barra.html          ← Pantalla del barman
-│   ├── cliente.html        ← Auto-pedido (fase 2, no MVP)
-│   ├── sw.js               ← Service Worker (versionado manual)
-│   ├── manifest.json
+│   ├── cliente.html        ← Auto-pedido (fase 2, todavía no existe)
+│   ├── sw.js               ← Service Worker (todavía no existe)
+│   ├── manifest.json       ← (todavía no existe)
 │   ├── js/
-│   │   ├── pb.js           ← Cliente PocketBase + helpers de conexión
-│   │   ├── estados.js      ← Máquina de estados de orden e items
+│   │   ├── pb.js           ← Cliente PocketBase propio. NO toca el DOM
+│   │   ├── estados.js      ← Espejo de la máquina de estados del server
+│   │   ├── ui.js           ← Login, avisos, modales, indicador de conexión
 │   │   ├── caja.js
 │   │   └── barra.js
 │   └── css/
@@ -96,7 +99,9 @@ tragos/
     └── BRIEF-HOOKS.md     ← La decisión del Chat. Implementada.
 ```
 
-`web/` está vacío a propósito: los bloques 1 a 3 fueron solo backend.
+Las pantallas se abren en `http://<ip-del-server>:8090/caja.html` y `/barra.html`.
+No hace falta configurar ninguna IP en el código: se sirven desde el mismo
+PocketBase, así que la API queda en el mismo origen.
 
 ---
 
@@ -137,6 +142,15 @@ Si no, las tablets siguen viendo la versión vieja.
 <cuerpo opcional>
 ```
 Tipos: `feat`, `fix`, `chore`, `style`, `perf`, `docs`, `refactor`.
+
+### Front: qué va en cada archivo
+- `pb.js` — hablar con el server. **No toca el DOM.**
+- `estados.js` — constantes y helpers de dominio. **No toca el DOM.**
+- `ui.js` — pedazos de pantalla compartidos (login, avisos, modales).
+- `caja.js` / `barra.js` — la lógica de cada pantalla.
+
+Las validaciones del front son **espejo** de las del server, nunca la única
+defensa: sirven para no mostrar botones que van a dar 403.
 
 ### Operación del servidor vs. guarda
 Conviven dos estilos en `pb/pb_hooks/`. La regla para elegir:

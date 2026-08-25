@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#0d0f12">
+  <title>Caja — Tragos</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <div class="app">
+    <header class="barra-sup">
+      <h1>CAJA</h1>
+      <span class="quien" id="quien"></span>
+      <span class="espaciador"></span>
+      <div class="conexion" id="conexion">
+        <span class="punto"></span><span data-txt>Conectado</span>
+      </div>
+      <button class="btn btn-chico" id="btn-cerrar-turno" style="display:none">Cerrar turno</button>
+      <button class="btn btn-chico btn-fantasma" id="btn-salir">Salir</button>
+    </header>
+
+    <div class="alerta-caido" id="alerta-caido" style="display:none">
+      SIN CONEXIÓN CON EL SERVIDOR — pasá al talonario de papel
+    </div>
+
+    <!-- Sin turno abierto no se puede vender -->
+    <div id="sin-turno" class="columna" style="flex:1;align-items:center;justify-content:center;gap:18px;padding:24px">
+      <div class="vacio" style="padding:0">
+        No hay ningún turno abierto.<br>
+        Abrí uno para empezar a cobrar.
+      </div>
+      <button class="btn btn-accion btn-grande" id="btn-abrir-turno" style="max-width:320px">
+        Abrir turno
+      </button>
+    </div>
+
+    <!-- Pantalla de venta -->
+    <div class="cuerpo" id="con-turno" style="display:none">
+      <div class="columna" style="flex:1">
+        <div class="tabs" id="tabs"></div>
+        <div class="scroll">
+          <div class="grilla" id="menu"></div>
+        </div>
+      </div>
+
+      <aside class="panel">
+        <div class="panel-cab">
+          <span>Pedido</span>
+          <button class="btn btn-chico btn-fantasma" id="btn-vaciar" style="visibility:hidden">Vaciar</button>
+        </div>
+
+        <div class="scroll" id="carrito"></div>
+
+        <div class="total">
+          <div class="fila">
+            <span>Total</span>
+            <span class="monto" id="total">$0</span>
+          </div>
+          <div class="pagos" id="pagos"></div>
+          <button class="btn btn-accion btn-grande" id="btn-cobrar" disabled>COBRAR</button>
+        </div>
+
+        <div class="panel-cab" style="border-top:1px solid var(--borde)">Pedidos del turno</div>
+        <div class="scroll" id="ordenes" style="max-height:34%"></div>
+      </aside>
+    </div>
+  </div>
+
+  <script src="js/pb.js"></script>
+  <script src="js/estados.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/caja.js"></script>
+</body>
+</html>

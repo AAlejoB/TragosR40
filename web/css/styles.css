@@ -1,0 +1,697 @@
+/**
+ * styles.css — Sistema de Tragos
+ *
+ * Decisiones de diseño, todas por el contexto real:
+ *  - Fondo oscuro: a las 3am una pantalla blanca encandila y molesta al de al lado.
+ *  - Contraste alto y tipografía grande: se lee de reojo, con luces de colores.
+ *  - Targets de 64px+: dedos apurados, a veces mojados.
+ *  - El número de orden es lo más grande de la pantalla: es lo que se grita.
+ */
+
+:root {
+  --fondo: #0d0f12;
+  --superficie: #171a1f;
+  --superficie-alta: #212630;
+  --borde: #2c333f;
+
+  --texto: #f2f4f7;
+  --texto-suave: #98a2b3;
+  --texto-tenue: #667085;
+
+  --accion: #ff9d2e;
+  --accion-oscura: #c76f00;
+  --ok: #35c46b;
+  --peligro: #ef4444;
+  --aviso: #fbbf24;
+  --info: #60a5fa;
+
+  --radio: 12px;
+  --radio-chico: 8px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 16px;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  overscroll-behavior: none;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  border: none;
+  background: none;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+input {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* ── Estructura ─────────────────────────────────────────── */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+
+.barra-sup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--superficie);
+  border-bottom: 1px solid var(--borde);
+  flex-shrink: 0;
+  min-height: 60px;
+}
+
+.barra-sup h1 {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.barra-sup .quien {
+  color: var(--texto-suave);
+  font-size: 14px;
+}
+
+.espaciador { flex: 1; }
+
+.cuerpo {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.columna {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.scroll {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Indicador de conexión ──────────────────────────────── */
+
+.conexion {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--texto-suave);
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--superficie-alta);
+}
+
+.punto {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ok);
+  flex-shrink: 0;
+}
+
+.conexion.caido { color: #fff; background: var(--peligro); }
+.conexion.caido .punto { background: #fff; animation: latir 1s infinite; }
+
+@keyframes latir {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+.alerta-caido {
+  background: var(--peligro);
+  color: #fff;
+  padding: 14px 16px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 17px;
+  flex-shrink: 0;
+}
+
+/* ── Botones ────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 12px 20px;
+  border-radius: var(--radio);
+  background: var(--superficie-alta);
+  color: var(--texto);
+  font-weight: 600;
+  border: 1px solid var(--borde);
+  transition: transform 0.06s, filter 0.12s;
+}
+
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.btn:disabled:active { transform: none; }
+
+.btn-accion { background: var(--accion); color: #1a1200; border-color: transparent; }
+.btn-ok { background: var(--ok); color: #04240f; border-color: transparent; }
+.btn-peligro { background: var(--peligro); color: #fff; border-color: transparent; }
+.btn-fantasma { background: transparent; }
+
+.btn-grande {
+  min-height: 72px;
+  font-size: 20px;
+  font-weight: 800;
+  width: 100%;
+}
+
+.btn-chico {
+  min-height: 40px;
+  padding: 8px 14px;
+  font-size: 14px;
+  border-radius: var(--radio-chico);
+}
+
+/* ── Login ──────────────────────────────────────────────── */
+
+.login {
+  position: fixed;
+  inset: 0;
+  background: var(--fondo);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+
+.login-caja {
+  width: 100%;
+  max-width: 380px;
+  text-align: center;
+}
+
+.login-caja h1 {
+  font-size: 26px;
+  margin-bottom: 4px;
+}
+
+.login-caja .sub {
+  color: var(--texto-suave);
+  margin-bottom: 26px;
+  font-size: 15px;
+}
+
+.campo {
+  width: 100%;
+  min-height: 58px;
+  padding: 14px 16px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  color: var(--texto);
+  font-size: 19px;
+  margin-bottom: 14px;
+  text-align: center;
+}
+
+.campo:focus { outline: 2px solid var(--accion); border-color: transparent; }
+
+.puntos-pin {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin: 8px 0 22px;
+  min-height: 22px;
+}
+
+.punto-pin {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--texto-tenue);
+}
+
+.punto-pin.lleno { background: var(--accion); border-color: var(--accion); }
+
+.teclado {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.tecla {
+  min-height: 68px;
+  font-size: 26px;
+  font-weight: 700;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tecla:active { background: var(--superficie-alta); transform: scale(0.95); }
+
+.error {
+  color: var(--peligro);
+  font-size: 15px;
+  min-height: 22px;
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+/* ── Caja: menú de productos ────────────────────────────── */
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px 0;
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.tab {
+  padding: 11px 18px;
+  border-radius: 999px;
+  background: var(--superficie);
+  color: var(--texto-suave);
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid var(--borde);
+}
+
+.tab.activa { background: var(--accion); color: #1a1200; border-color: transparent; }
+
+.grilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  padding: 14px 16px 20px;
+}
+
+.producto {
+  min-height: 92px;
+  padding: 12px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  text-align: left;
+  gap: 6px;
+}
+
+.producto:active { background: var(--superficie-alta); transform: scale(0.97); }
+
+.producto .nom { font-weight: 700; font-size: 15px; line-height: 1.25; }
+.producto .pre { color: var(--accion); font-weight: 800; font-size: 17px; }
+
+/* ── Caja: carrito ──────────────────────────────────────── */
+
+.panel {
+  width: 380px;
+  flex-shrink: 0;
+  background: var(--superficie);
+  border-left: 1px solid var(--borde);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.panel-cab {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--borde);
+  font-weight: 700;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.linea {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--borde);
+}
+
+.linea .nom { flex: 1; font-weight: 600; font-size: 15px; min-width: 0; }
+.linea .sub { color: var(--texto-tenue); font-size: 13px; }
+.linea .imp { font-weight: 700; font-size: 15px; min-width: 74px; text-align: right; }
+
+.cant {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--superficie-alta);
+  border-radius: var(--radio-chico);
+  overflow: hidden;
+}
+
+.cant button {
+  width: 40px;
+  height: 40px;
+  font-size: 21px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cant button:active { background: var(--borde); }
+.cant .n { min-width: 30px; text-align: center; font-weight: 800; font-size: 17px; }
+
+.total {
+  padding: 16px;
+  border-top: 1px solid var(--borde);
+  flex-shrink: 0;
+}
+
+.total .fila {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 14px;
+}
+
+.total .fila span:first-child { color: var(--texto-suave); font-size: 16px; }
+.total .fila .monto { font-size: 34px; font-weight: 800; color: var(--accion); }
+
+.pagos { display: flex; gap: 8px; margin-bottom: 12px; }
+
+.pago {
+  flex: 1;
+  min-height: 48px;
+  border-radius: var(--radio-chico);
+  background: var(--superficie-alta);
+  border: 2px solid transparent;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.pago.elegido { border-color: var(--accion); color: var(--accion); }
+
+.vacio {
+  padding: 44px 20px;
+  text-align: center;
+  color: var(--texto-tenue);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* ── Número gigante tras cobrar ─────────────────────────── */
+
+.velo {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 6, 8, 0.93);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 20px;
+}
+
+.numerote {
+  text-align: center;
+  animation: aparecer 0.18s ease-out;
+}
+
+@keyframes aparecer {
+  from { transform: scale(0.85); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.numerote .rot {
+  color: var(--texto-suave);
+  font-size: 19px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.numerote .n {
+  font-size: min(46vw, 300px);
+  font-weight: 900;
+  line-height: 0.92;
+  color: var(--accion);
+  letter-spacing: -6px;
+}
+
+.numerote .det {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 14px 0 30px;
+}
+
+/* ── Órdenes recientes ──────────────────────────────────── */
+
+.orden-chip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--borde);
+}
+
+.orden-chip .num {
+  font-size: 24px;
+  font-weight: 900;
+  min-width: 52px;
+  color: var(--accion);
+}
+
+.pill {
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+
+.pill.cobrada { background: rgba(96, 165, 250, 0.18); color: var(--info); }
+.pill.en_preparacion { background: rgba(251, 191, 36, 0.18); color: var(--aviso); }
+.pill.lista { background: rgba(53, 196, 107, 0.2); color: var(--ok); }
+.pill.entregada { background: var(--superficie-alta); color: var(--texto-tenue); }
+.pill.descartada { background: rgba(239, 68, 68, 0.18); color: var(--peligro); }
+
+/* ── Barra: tablero de tragos ───────────────────────────── */
+
+.tablero {
+  display: flex;
+  gap: 1px;
+  background: var(--borde);
+  flex: 1;
+  min-height: 0;
+}
+
+.pista {
+  flex: 1;
+  background: var(--fondo);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.pista-cab {
+  padding: 13px 16px;
+  background: var(--superficie);
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.contador {
+  background: var(--superficie-alta);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 13px;
+  color: var(--texto-suave);
+}
+
+.grupo {
+  margin: 12px 12px 0;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  overflow: hidden;
+}
+
+.grupo-cab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--superficie-alta);
+}
+
+.grupo-cab .num {
+  font-size: 30px;
+  font-weight: 900;
+  color: var(--accion);
+  line-height: 1;
+}
+
+.grupo-cab .tiempo { color: var(--texto-suave); font-size: 13px; margin-left: auto; }
+.grupo-cab .tiempo.tarde { color: var(--aviso); font-weight: 700; }
+
+.trago {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  border-top: 1px solid var(--borde);
+  width: 100%;
+  text-align: left;
+}
+
+.trago:active { background: var(--superficie-alta); }
+.trago .cantidad {
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--accion);
+  min-width: 34px;
+}
+.trago .nombre { flex: 1; font-weight: 600; font-size: 16px; min-width: 0; }
+
+.acciones-trago { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--borde); }
+.acciones-trago .btn { flex: 1; }
+
+.aviso-timeout {
+  background: rgba(251, 191, 36, 0.14);
+  color: var(--aviso);
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  border-top: 1px solid var(--borde);
+}
+
+/* ── Modales ────────────────────────────────────────────── */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 6, 8, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 150;
+  padding: 20px;
+}
+
+.modal-caja {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 16px;
+  padding: 22px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-caja h2 { font-size: 20px; margin-bottom: 6px; }
+.modal-caja .sub { color: var(--texto-suave); font-size: 14px; margin-bottom: 18px; }
+
+.opciones { display: flex; flex-direction: column; gap: 9px; margin-bottom: 18px; }
+
+.opcion {
+  min-height: 54px;
+  padding: 13px 16px;
+  background: var(--superficie-alta);
+  border: 2px solid transparent;
+  border-radius: var(--radio);
+  text-align: left;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.opcion.elegida { border-color: var(--accion); color: var(--accion); }
+
+.acciones-modal { display: flex; gap: 10px; }
+.acciones-modal .btn { flex: 1; }
+
+/* ── Arqueo ─────────────────────────────────────────────── */
+
+.arqueo-fila {
+  display: flex;
+  justify-content: space-between;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--borde);
+  font-size: 16px;
+}
+
+.arqueo-fila.fuerte { font-weight: 800; font-size: 20px; border-bottom: none; padding-top: 16px; }
+.arqueo-fila .v { font-weight: 700; }
+
+/* ── Avisos flotantes ───────────────────────────────────── */
+
+.tostada {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  background: var(--superficie-alta);
+  border: 1px solid var(--borde);
+  color: var(--texto);
+  padding: 14px 22px;
+  border-radius: var(--radio);
+  font-weight: 600;
+  z-index: 300;
+  max-width: 88vw;
+  text-align: center;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+}
+
+.tostada.mala { background: var(--peligro); border-color: transparent; color: #fff; }
+.tostada.buena { background: var(--ok); border-color: transparent; color: #04240f; }
+
+/* ── Pantallas angostas (tablet vertical / celular) ─────── */
+
+@media (max-width: 860px) {
+  .cuerpo { flex-direction: column; }
+  .panel {
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid var(--borde);
+    max-height: 52%;
+  }
+  .grilla { grid-template-columns: repeat(auto-fill, minmax(126px, 1fr)); }
+  .tablero { flex-direction: column; overflow-y: auto; }
+  .pista { min-height: 200px; }
+}

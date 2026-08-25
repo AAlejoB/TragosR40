@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#0d0f12">
+  <title>Barra — Tragos</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <div class="app">
+    <header class="barra-sup">
+      <h1>BARRA</h1>
+      <span class="quien" id="quien"></span>
+      <span class="espaciador"></span>
+      <div class="conexion" id="conexion">
+        <span class="punto"></span><span data-txt>Conectado</span>
+      </div>
+      <button class="btn btn-chico btn-fantasma" id="btn-salir">Salir</button>
+    </header>
+
+    <div class="alerta-caido" id="alerta-caido" style="display:none">
+      SIN CONEXIÓN CON EL SERVIDOR — los pedidos nuevos no van a aparecer
+    </div>
+
+    <div id="sin-turno" class="alerta-caido" style="display:none;background:var(--superficie-alta);color:var(--texto-suave)">
+      No hay turno abierto. Podés seguir entregando lo que ya está vendido.
+    </div>
+
+    <div class="tablero">
+      <section class="pista">
+        <div class="pista-cab">
+          Cola <span class="contador" id="n-cola">0</span>
+        </div>
+        <div class="scroll" id="cola"></div>
+      </section>
+
+      <section class="pista">
+        <div class="pista-cab">
+          Preparando <span class="contador" id="n-prep">0</span>
+        </div>
+        <div class="scroll" id="preparando"></div>
+      </section>
+
+      <section class="pista">
+        <div class="pista-cab">
+          Listos <span class="contador" id="n-listos">0</span>
+        </div>
+        <div class="scroll" id="listos"></div>
+      </section>
+    </div>
+  </div>
+
+  <script src="js/pb.js"></script>
+  <script src="js/estados.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/barra.js"></script>
+</body>
+</html>

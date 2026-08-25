@@ -17,6 +17,7 @@
 | 24 ago 2026 | **Bloque 1b** — `arrancar.cmd` y `verificar.cmd` (doble clic, sin terminal), manual de operación y guía de qué modelo usar en cada bloque. |
 | 25 ago 2026 | **Bloque 2** — push inicial a GitHub. Diagnóstico de `[HOOKS]`: 9 agujeros medidos contra el servidor real y 3 opciones de arquitectura. **Frenado a propósito**: la decisión va al Chat. Ver [`DECISION-HOOKS.md`](DECISION-HOOKS.md). |
 | 25 ago 2026 | **Bloque 3** — `[HOOKS]` implementado según [`BRIEF-HOOKS.md`](BRIEF-HOOKS.md). Los 9 agujeros cerrados, `[CLAIM-TIMEOUT]` andando. La suite pasó de 52 a **92 chequeos, 0 fallas**. |
+| 25 ago 2026 | **Bloque 4** — `caja.html` y `barra.html` andando, con realtime. Probadas de punta a punta en el navegador: cobro, número gritable, tablero de la barra, anulación y caída del servidor. Sin PWA todavía. |
 
 ---
 
@@ -311,6 +312,70 @@ llame `*.pb.js` **no se carga y el server no dice nada**.
 
 ---
 
+### Bloque 4 — Las dos pantallas (25 ago 2026)
+
+**Qué se hizo:**
+
+- `web/caja.html` + `web/js/caja.js` — menú por categoría, carrito, cobro y
+  arqueo al cerrar turno.
+- `web/barra.html` + `web/js/barra.js` — tablero de tres pistas
+  (cola → preparando → listos), agrupado por número de pedido.
+- `web/js/pb.js` — cliente de PocketBase escrito a mano, con realtime.
+- `web/js/ui.js` — login con teclado numérico, avisos, modales, indicador de
+  conexión.
+- `web/js/estados.js`, `web/css/styles.css`, `web/index.html`.
+- `arrancar.cmd` ahora sirve `web/` con `--publicDir`.
+
+**Probado de verdad en el navegador, no sólo escrito:** login, apertura de
+turno, carga de un pedido de $25.000, cobro, número gigante, llegada a la barra
+por realtime, tomar/listo/entregar, anulación con motivo, caída del servidor y
+recuperación sola, y cierre de turno con arqueo.
+
+---
+
+### Decisiones del front
+
+**1. Cliente de PocketBase escrito a mano, sin SDK.**
+El SDK oficial viene por CDN y el local no tiene internet. Todo lo que hace
+falta entra en `pb.js`. De paso queda sin dependencias ni build step, que es lo
+que pide el stack.
+
+**2. El carrito vive en memoria hasta que se cobra.**
+Si se creara la orden al primer trago, cada cliente que se arrepiente dejaría un
+`borrador` huérfano. Recién al tocar COBRAR se crea la orden con sus items y se
+llama al endpoint.
+
+**Y si el cobro se corta en el medio,** el id de la orden queda guardado en el
+navegador y el siguiente intento reintenta sobre la MISMA orden. Como `cobrar`
+es idempotente, no se puede cobrar dos veces por accidente. Al arrancar, la
+pantalla detecta un cobro colgado y pregunta si cobrarlo o descartarlo.
+
+**3. Cada pantalla acepta sólo ciertos roles.**
+`caja.html` pide cajero o jefe; `barra.html` pide barman o jefe. El servidor ya
+lo rechazaría, pero no hay que ofrecerle a un cajero un botón "Tomar" que va a
+dar 403.
+
+**4. Una sesión por pantalla, no por dispositivo.**
+Las dos pantallas comparten `localStorage`. Con una sola clave, entrar en la
+barra deslogueaba la caja del mismo aparato — pasó durante las pruebas y se ve
+rarísimo. Ahora la clave incluye el nombre de la pantalla.
+
+**5. El realtime respeta el portón.**
+Se midió: mientras la orden está en `borrador`, la barra no recibe **ningún**
+evento. Las reglas de acceso se aplican también al stream, así que el portón no
+depende de que la pantalla filtre bien.
+
+**6. Aviso de caída bien visible.**
+Si el server no responde, aparece una franja roja: *"SIN CONEXIÓN CON EL
+SERVIDOR — pasá al talonario de papel"*. Es la conexión con el Plan B: el cajero
+tiene que enterarse en el momento, no cuando no cierre el arqueo. Vuelve sola
+cuando el server revive, sin recargar.
+
+**7. Si el SSE no levanta, sondeo cada 3 segundos.**
+Una tablet vieja no puede dejar a la barra sin ver pedidos.
+
+---
+
 ## 🔑 Keywords
 
 *(convención: cada feature se referencia con una keyword entre corchetes, para
@@ -400,6 +465,26 @@ cd "C:\Users\Alejo\OneDrive\Documentos\CLAUDE\TRAGOS RUTA40"
 node pb\verificar.mjs
 ```
 </details>
+
+#### B2 · Abrir las pantallas
+
+Con el servidor prendido, en la tablet (o en la notebook) abrí el navegador y andá a:
+
+| Pantalla | Dirección |
+|---|---|
+| Elegir | `http://<ip-del-server>:8090` |
+| Caja | `http://<ip-del-server>:8090/caja.html` |
+| Barra | `http://<ip-del-server>:8090/barra.html` |
+
+En la misma notebook del servidor, `<ip-del-server>` es `127.0.0.1`. Desde una
+tablet hay que poner la IP de la notebook en la WiFi del local (algo tipo
+`192.168.1.50`). Para saberla, abrí PowerShell y escribí `ipconfig`: es la
+"Dirección IPv4".
+
+Conviene **guardar la página en la pantalla de inicio** de cada tablet, así
+queda como si fuera una app.
+
+Usuarios de prueba: `caja1`/1111, `barra1`/2222, `jefe`/9999.
 
 #### C · Apagar el servidor
 

@@ -10,6 +10,8 @@ echo   ============================================
 echo    Servidor del sistema de tragos
 echo   ============================================
 echo.
+echo    Caja:      http://127.0.0.1:8090/caja.html
+echo    Barra:     http://127.0.0.1:8090/barra.html
 echo    Admin UI:  http://127.0.0.1:8090/_/
 echo    Usuario:   admin@ruta40.local
 echo.
@@ -17,7 +19,7 @@ echo    Deja esta ventana ABIERTA mientras lo usas.
 echo    Para apagarlo: cerra la ventana o Ctrl+C
 echo.
 
-"%~dp0pb\pocketbase.exe" serve --http=0.0.0.0:8090
+"%~dp0pb\pocketbase.exe" serve --http=0.0.0.0:8090 --publicDir="%~dp0web"
 
 echo.
 echo   El servidor se detuvo.
