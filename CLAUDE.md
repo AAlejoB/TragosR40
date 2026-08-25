@@ -12,6 +12,7 @@
 | Cómo arrancar, verificar, qué significa cada palabra | [`docs/HISTORIA.md`](docs/HISTORIA.md) § Manual de operación |
 | Qué modelo usar en cada bloque de trabajo | [`docs/HISTORIA.md`](docs/HISTORIA.md) § Qué modelo usar |
 | Instalar PocketBase en una máquina nueva | [`pb/README.md`](pb/README.md) |
+| Qué falta blindar en el servidor y por qué | [`docs/DECISION-HOOKS.md`](docs/DECISION-HOOKS.md) ⏸ esperando decisión del Chat |
 
 ---
 
@@ -88,7 +89,8 @@ tragos/
 │       └── styles.css
 └── docs/
     ├── MODELO-DATOS.md
-    └── HISTORIA.md
+    ├── HISTORIA.md
+    └── DECISION-HOOKS.md  ← Decisión abierta, va al Chat
 ```
 
 `web/` está vacío a propósito: el Bloque 1 fue solo backend.

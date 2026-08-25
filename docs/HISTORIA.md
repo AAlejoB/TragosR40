@@ -15,6 +15,7 @@
 | Ago 2026 | Diseño del modelo de datos y la máquina de estados (Claude Chat). Repo vacío. |
 | 24 ago 2026 | **Bloque 1** — esqueleto del repo, PocketBase v0.40.1, schema de las 6 colecciones, reglas por rol, seed y suite de verificación. Sin UI. |
 | 24 ago 2026 | **Bloque 1b** — `arrancar.cmd` y `verificar.cmd` (doble clic, sin terminal), manual de operación y guía de qué modelo usar en cada bloque. |
+| 25 ago 2026 | **Bloque 2** — push inicial a GitHub. Diagnóstico de `[HOOKS]`: 9 agujeros medidos contra el servidor real y 3 opciones de arquitectura. **Frenado a propósito**: la decisión va al Chat. Ver [`DECISION-HOOKS.md`](DECISION-HOOKS.md). |
 
 ---
 
@@ -171,6 +172,35 @@ instrucciones de descarga en `pb/README.md`. Lo que SÍ se versiona es
 **Riesgo a mirar:** las 5 cosas de arriba son la misma cosa — reglas de negocio
 que hoy viven en el cliente. Si alguien abre la Admin UI o pega un `curl`, las
 saltea. El próximo bloque debería ser `pb_hooks/` antes que la UI.
+
+---
+
+### Bloque 2 — Push y diagnóstico de `[HOOKS]` (25 ago 2026)
+
+**Qué se hizo:**
+
+- `git push` inicial. Los 2 commits del Bloque 1 ya están en
+  <https://github.com/AAlejoB/TragosR40.git>.
+- Se midió contra el servidor prendido **qué deja pasar hoy la API sin hooks**:
+  **9 agujeros abiertos**, cada uno con un `200 OK` que no debería existir. La
+  tabla completa está en [`DECISION-HOOKS.md`](DECISION-HOOKS.md).
+- Se escribieron 3 opciones de arquitectura (operaciones del servidor / guardas
+  de validación / híbrido) con lo que cierra y lo que no cierra cada una.
+
+**Qué NO se hizo, a propósito:** ni una línea de `pb_hooks/`. Alejo eligió
+frenar y llevar la decisión al Chat, que es lo que dice la división de trabajo
+de `CLAUDE.md`.
+
+**Lo que quedó claro con la medición:** el schema cubre bien *quién puede tocar
+qué* (permisos), pero no cubre nada de *qué es una operación válida*. Los cuatro
+agujeros que más duelen (cobrar sin congelar el precio, total inventado,
+reescribir un precio ya cobrado, anular sin motivo) **no se ven en pantalla**:
+se ven en el arqueo. Son justo los que conviene volver imposibles.
+
+**Guardado para cuando haya decisión:** el script que mide los 9 agujeros está
+escrito y probado. Cuando se implementen los hooks, esas 9 pruebas se dan vuelta
+—hoy pasan, tienen que pasar a fallar— y se suman a `verificar.mjs`. Ese es el
+criterio de "el bloque está listo".
 
 ---
 
@@ -405,10 +435,11 @@ sale más barato que un arqueo que no cierra.
 
 ### Pendientes
 
-1. `[HOOKS]` — mover al server las reglas que hoy tendría que respetar el
-   cliente: copia de `precio_unit`/`nombre_snapshot` al cobrar, asignación de
-   `numero`, derivación del estado de la orden, validación de transiciones,
-   chequeo de turno abierto. **Debería ir antes que la UI.**
+1. `[HOOKS]` — **esperando decisión del Chat.** El diagnóstico con los 9
+   agujeros medidos y las 3 opciones está en
+   [`DECISION-HOOKS.md`](DECISION-HOOKS.md). Recomendación de Code: opción C
+   (híbrido), y antes que la UI. Nada de esto se implementa hasta que vuelva el
+   brief.
 2. `[CLAIM-TIMEOUT]` — cron que devuelve a `pendiente` los items en
    `preparando` con más de 8 minutos, y escribe evento `timeout`.
 3. UI de caja (`caja.html`) y de barra (`barra.html`).
