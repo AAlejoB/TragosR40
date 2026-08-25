@@ -9,6 +9,9 @@
 |---|---|
 | Tablas, estados de la orden, reglas del modelo | [`docs/MODELO-DATOS.md`](docs/MODELO-DATOS.md) |
 | Decisiones tomadas, bugs, evolución | [`docs/HISTORIA.md`](docs/HISTORIA.md) |
+| Cómo arrancar, verificar, qué significa cada palabra | [`docs/HISTORIA.md`](docs/HISTORIA.md) § Manual de operación |
+| Qué modelo usar en cada bloque de trabajo | [`docs/HISTORIA.md`](docs/HISTORIA.md) § Qué modelo usar |
+| Instalar PocketBase en una máquina nueva | [`pb/README.md`](pb/README.md) |
 
 ---
 
@@ -61,6 +64,8 @@ Si una feature necesita internet para funcionar durante la noche, está mal dise
 ```
 tragos/
 ├── .gitignore
+├── arrancar.cmd            ← Doble clic: prende el servidor
+├── verificar.cmd           ← Doble clic: corre los 52 chequeos del schema
 ├── pb/                     ← PocketBase (ejecutable + pb_data + pb_migrations)
 │   ├── pocketbase(.exe)    ← v0.40.1. NO commitear (33 MB) — ver pb/README.md
 │   ├── pb_data/            ← SQLite. NO commitear
@@ -185,3 +190,28 @@ rediseño grande en medio de una tarea, se frena y vuelve al Chat.
 - Explicar visualmente cuando se proponga un cambio
 - Emojis con moderación en respuestas, NO en código salvo pedido
 - Avisar el riesgo antes de cambios grandes, y dar opciones
+
+### ⚠️ Alejo no programa. Instrucciones ejecutables, no aproximadas.
+
+Esto no es opcional: es la diferencia entre que pueda seguir el proyecto o no.
+
+1. **Siempre decir DÓNDE se escribe cada cosa.** No alcanza con
+   "corré `node pb/verificar.mjs`". Va: *"doble clic en `verificar.cmd`"*, o
+   *"abrí PowerShell en la carpeta del proyecto y escribí esto"*. Los tres
+   lugares posibles (chat / terminal / doble clic) están en
+   `docs/HISTORIA.md` § Manual de operación.
+2. **Comandos en sintaxis PowerShell**, que es la terminal de su máquina.
+   `.\archivo.exe` y `pb\archivo.js`, no `./archivo` ni `pb/archivo.js`.
+   Si un bloque es para Git Bash, aclararlo arriba.
+3. **Decir qué tiene que ver en pantalla si salió bien.** Pegar la salida
+   esperada, no solo el comando.
+4. **No dar por sabido el vocabulario.** Node, npm, endpoint, hook, migración,
+   seed, commit: la primera vez que aparecen en una respuesta, una frase de
+   qué son. El glosario vive en `docs/HISTORIA.md` § Manual de operación —
+   si aparece una palabra nueva, agregarla ahí.
+5. **Preferir el doble clic a la terminal** cuando se pueda. Si una tarea se va
+   a repetir, envolverla en un `.cmd` en la raíz (ver `arrancar.cmd`).
+   Los `.cmd` se guardan **con CRLF y sin acentos en los `echo`** — ver
+   `docs/HISTORIA.md` § Gotchas de Windows.
+6. **Si algo falla, dar la tabla de "qué ves → qué hacer"**, no un stack trace
+   suelto.
