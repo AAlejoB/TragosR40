@@ -13,6 +13,7 @@ const estado = {
   items: [],
   ordenes: {},   // id -> orden
   cargando: false,
+  ultimaCarga: 0,   // cuándo trajimos datos del server por última vez
 }
 
 const $ = (sel) => document.querySelector(sel)
@@ -46,6 +47,7 @@ const cargar = async () => {
     })
 
     estado.items = items
+    estado.ultimaCarga = Date.now()
     estado.ordenes = {}
     for (const it of items) {
       const o = it.expand && it.expand.orden_id
@@ -208,10 +210,31 @@ const pintarListos = () => {
   }).join('')
 }
 
+/**
+ * Cuán vieja está la pantalla. Se muestra siempre, no sólo cuando falla:
+ * el barman tiene que poder MIRAR y saber si lo que ve es de ahora.
+ * Si dice más de 30 segundos, algo anda mal aunque el punto esté verde.
+ */
+const pintarFrescura = () => {
+  const el = $('#frescura')
+  if (!el) return
+  const seg = Math.floor((Date.now() - estado.ultimaCarga) / 1000)
+  const txt = el.querySelector('[data-txt]')
+  if (!estado.ultimaCarga) {
+    txt.textContent = 'sin datos'
+  } else if (seg < 20) {
+    txt.textContent = 'al día'
+  } else {
+    txt.textContent = 'hace ' + (seg < 60 ? seg + ' s' : Math.floor(seg / 60) + ' min')
+  }
+  el.classList.toggle('caido', estado.ultimaCarga > 0 && seg > 30)
+}
+
 const pintar = () => {
   pintarCola()
   pintarPreparando()
   pintarListos()
+  pintarFrescura()
   $('#sin-turno').style.display = estado.turno ? 'none' : 'block'
 }
 
@@ -330,8 +353,14 @@ const iniciar = async () => {
 
   PB.escuchar(['ordenes', 'orden_items'], () => cargar())
 
-  // Los "hace N min" y el aviso de timeout se quedarían viejos sin esto.
-  setInterval(pintar, 20000)
+  // RED DE SEGURIDAD. El realtime puede quedar "zombi": la conexión sigue
+  // abierta, no salta ningún error, pero dejan de llegar avisos. Sin esto, la
+  // barra mostraría una cola vieja para siempre y nadie se enteraría. Es el
+  // caso que más duele: un trago pagado que nadie prepara.
+  setInterval(cargar, 15000)
+
+  // Los "hace N min", el aviso de timeout y el indicador de frescura.
+  setInterval(pintar, 5000)
   // El turno puede cambiar sin que se toque un item.
   setInterval(() => buscarTurnoAbierto().then(pintar), 60000)
 }

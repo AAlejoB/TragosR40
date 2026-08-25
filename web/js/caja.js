@@ -428,6 +428,10 @@ const iniciar = async () => {
 
   // La caja escucha los cambios para ver cuándo la barra marca algo listo.
   PB.escuchar(['ordenes', 'orden_items'], () => cargarOrdenes())
+
+  // Misma red de seguridad que la barra, por si el realtime queda zombi.
+  setInterval(cargarOrdenes, 20000)
+  setInterval(buscarTurnoAbierto, 60000)
 }
 
 iniciar()

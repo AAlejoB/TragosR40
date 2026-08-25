@@ -13,6 +13,7 @@
 | Qué modelo usar en cada bloque de trabajo | [`docs/HISTORIA.md`](docs/HISTORIA.md) § Qué modelo usar |
 | Instalar PocketBase en una máquina nueva | [`pb/README.md`](pb/README.md) |
 | Cómo hablan las pantallas con el server | [`web/js/pb.js`](web/js/pb.js) — cliente propio, sin CDN |
+| Cuánto tarda un pedido en llegar a la barra | [`docs/HISTORIA.md`](docs/HISTORIA.md) § Qué tan rápido — **27 ms medidos** |
 | Por qué el servidor valida lo que valida | [`docs/DECISION-HOOKS.md`](docs/DECISION-HOOKS.md) → [`docs/BRIEF-HOOKS.md`](docs/BRIEF-HOOKS.md) ✅ implementado |
 
 ---

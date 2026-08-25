@@ -10,6 +10,8 @@
 
 ## 📅 Línea de tiempo
 
+>CLCODE<
+
 | Período | Hito |
 |---|---|
 | Ago 2026 | Diseño del modelo de datos y la máquina de estados (Claude Chat). Repo vacío. |
@@ -25,6 +27,8 @@
 
 ### 1. Todo offline, sin cloud en el path operativo
 
+>CLCHAT<
+
 **Estado:** decidido, no negociable.
 
 **Por qué:** el local tiene señal celular débil y con gente adentro la celda se
@@ -34,6 +38,8 @@ satura. Un sistema que depende de la nube se cae justo en el pico de venta.
 salida a internet. Sync a la nube (si se hace) es al cierre, nunca durante.
 
 ### 2. El barman no toca plata
+
+>CLCHAT<
 
 **Estado:** decidido, es la razón de existir del sistema.
 
@@ -45,6 +51,8 @@ barra. Ver `MODELO-DATOS.md` § "Reglas duras".
 
 ### 3. Estado en el item, no en la orden
 
+>CLCHAT<
+
 **Estado:** decidido.
 
 **Por qué:** un pedido de 4 tragos puede tener 2 listos y 2 en preparación, con
@@ -55,6 +63,8 @@ mano.
 
 ### 4. MVP sin auto-pedido del cliente
 
+>CLCHAT<
+
 **Estado:** decidido para la primera noche.
 
 **Por qué:** el cuello de botella real es la caja, no la barra. Y hay que medir
@@ -64,6 +74,8 @@ en fase 2.
 ---
 
 ### 5. `staff` es una auth collection de PocketBase; el PIN es el `password`
+
+>CLCODE<
 
 **Estado:** decidido en el Bloque 1. **Revisar con Alejo si no convence.**
 
@@ -82,6 +94,8 @@ opcional y vacío. El campo se llama `password` en la API, no `pin`.
 
 ### 6. La colección `users` por defecto de PocketBase se borra
 
+>CLCODE<
+
 **Estado:** decidido, es seguridad.
 
 **Por qué:** PocketBase crea una colección `users` con `createRule = ""`, o sea
@@ -91,6 +105,8 @@ arrancan con `@request.auth.id != ""`. Habría leído el menú, los turnos y los
 eventos. La migración inicial la borra.
 
 ### 7. El ejecutable de PocketBase no va al repo
+
+>CLCODE<
 
 **Estado:** decidido.
 
@@ -102,6 +118,8 @@ instrucciones de descarga en `pb/README.md`. Lo que SÍ se versiona es
 ---
 
 ### 8. El reloj del server es un riesgo de hardware sin resolver
+
+>CLCHAT<
 
 **Estado:** abierto. **Decidir antes de comprar la Raspberry Pi.**
 
@@ -124,6 +142,8 @@ cuesta nada.
 
 ### Gotchas de PocketBase que ya nos mordieron
 
+>CLCODE<
+
 - **Una regla de `list` no da 403, filtra.** Si no matchea, PocketBase devuelve
   `200` con la lista vacía, no un error. Al testear permisos de lectura hay que
   chequear `totalItems === 0`, no el status code.
@@ -131,6 +151,8 @@ cuesta nada.
   filtrar si el registro existe.
 
 ### Gotchas de los hooks de PocketBase (Bloque 3)
+
+>CLCODE<
 
 Estos cinco costaron toda una sesión. Están en orden de cuánto cuesta
 descubrirlos, porque **ninguno da un error que te apunte al problema**.
@@ -162,6 +184,8 @@ un mensaje que apuntaba al lugar equivocado. Por eso `verificar.mjs` ahora
 
 ### Gotchas de Windows que ya nos mordieron
 
+>CLCODE<
+
 - **Un `.cmd` guardado con saltos de línea de Unix (LF) se rompe.** cmd.exe lo
   parsea mal y aparecen errores absurdos tipo `"endo" no se reconoce como un
   comando` (se comió la `ec` de `echo`). Los `.cmd` de este repo **tienen que
@@ -179,6 +203,8 @@ un mensaje que apuntaba al lugar equivocado. Por eso `verificar.mjs` ahora
 ## 📦 Bloques de trabajo
 
 ### Bloque 1 — Esqueleto + schema (24 ago 2026)
+
+>CLCODE<
 
 **Qué se hizo:**
 
@@ -226,6 +252,8 @@ saltea. El próximo bloque debería ser `pb_hooks/` antes que la UI.
 
 ### Bloque 2 — Push y diagnóstico de `[HOOKS]` (25 ago 2026)
 
+>CLCODE<
+
 **Qué se hizo:**
 
 - `git push` inicial. Los 2 commits del Bloque 1 ya están en
@@ -254,6 +282,8 @@ criterio de "el bloque está listo".
 ---
 
 ### Bloque 3 — `[HOOKS]` implementado (25 ago 2026)
+
+>CLCODE<
 
 **Brief:** [`BRIEF-HOOKS.md`](BRIEF-HOOKS.md), decidido en Claude Chat. Opción C
 corrida: híbrido con `claim` del lado de las operaciones.
@@ -314,6 +344,8 @@ llame `*.pb.js` **no se carga y el server no dice nada**.
 
 ### Bloque 4 — Las dos pantallas (25 ago 2026)
 
+>CLCODE<
+
 **Qué se hizo:**
 
 - `web/caja.html` + `web/js/caja.js` — menú por categoría, carrito, cobro y
@@ -334,6 +366,8 @@ recuperación sola, y cierre de turno con arqueo.
 ---
 
 ### Decisiones del front
+
+>CLCODE<
 
 **1. Cliente de PocketBase escrito a mano, sin SDK.**
 El SDK oficial viene por CDN y el local no tiene internet. Todo lo que hace
@@ -376,7 +410,61 @@ Una tablet vieja no puede dejar a la barra sin ver pedidos.
 
 ---
 
+## ⏱️ Qué tan rápido llega un pedido a la barra
+
+>CLCODE<
+
+**Medido el 25 ago 2026**, no estimado. 10 cobros reales, cronometrando desde
+que la caja manda el cobro hasta que el trago aparece dibujado en la pantalla
+del barman.
+
+| | milisegundos |
+|---|---|
+| Más rápido | 21 |
+| **Promedio** | **27** |
+| Mediana | 25 |
+| Más lento | 43 |
+
+Llegaron **10 de 10**. Para tener referencia: un parpadeo son unos 100 ms.
+
+**Ojo con lo que esto mide y lo que no.** Se midió en una sola notebook, contra
+`127.0.0.1`, sin WiFi de por medio. O sea: **27 ms es lo que tarda el sistema**,
+y lo que falta medir es lo que agrega la red del local. En una LAN decente son
+unos pocos milisegundos más; el número grande va a depender del access point,
+no del código. **Esa medición hay que rehacerla en el local**, y está anotada
+como pendiente.
+
+### Qué pasa si el aviso NO llega
+
+Tres capas, de la más rápida a la más lenta:
+
+| Si falla... | Qué lo salva | Cuánto tarda |
+|---|---|---|
+| Nada. Todo normal | El aviso instantáneo del server | **27 ms** |
+| El aviso se corta y el navegador se da cuenta | Cambia a preguntar cada 3 segundos | **hasta 3 s** |
+| El aviso queda "zombi" (la conexión sigue abierta pero no llega nada) | La barra pregunta igual cada 15 s | **hasta 15 s** |
+| El servidor se cayó | Franja roja en las dos pantallas | **hasta 5 s en verse** |
+
+La tercera fila es la importante y **era un agujero real hasta el 25 ago**: la
+barra sólo volvía a preguntar cuando el server le avisaba. Si el aviso moría en
+silencio, mostraba una cola vieja para siempre y nadie se enteraba — un trago
+pagado que nadie prepara. Ahora pregunta cada 15 segundos pase lo que pase.
+
+Se verificó: **6 recargas solas en 90 segundos, exactamente cada 15,0 s**, sin
+tocar nada.
+
+### Y para que no haya que confiar a ciegas
+
+La barra muestra en la cabecera **cuán fresco es lo que estás viendo**: dice
+"al día" si los datos son de hace menos de 20 segundos, y si pasa de 30 se pone
+en rojo con el tiempo real. El barman puede **mirar** y saber si la pantalla
+está viva, sin depender de que alguien le avise.
+
+---
+
 ## 🔑 Keywords
+
+>CLCODE<
 
 *(convención: cada feature se referencia con una keyword entre corchetes, para
 poder retomarla en otra conversación. Ej: `[CLAIM-TIMEOUT]`, `[ARQUEO]`)*
@@ -392,10 +480,14 @@ poder retomarla en otra conversación. Ej: `[CLAIM-TIMEOUT]`, `[ARQUEO]`)*
 
 ## 🖥️ Manual de operación — paso a paso
 
+>CLCODE<
+
 > Escrito para que lo siga alguien que no programa. Si algo de acá no se
 > entiende, el problema es el texto, no el lector: avisá y se reescribe.
 
 ### Primero: dónde se escriben las cosas
+
+>CLCODE<
 
 Hay tres lugares distintos y es fácil confundirlos.
 
@@ -414,6 +506,8 @@ node pb\verificar.mjs
 ...eso va **en la terminal**, no en el chat con Claude.
 
 ### Las 3 cosas que vas a hacer siempre
+
+>CLCODE<
 
 #### A · Arrancar el servidor
 
@@ -493,6 +587,8 @@ de ella.
 
 ### Cómo abrir una terminal parada en la carpeta correcta
 
+>CLCODE<
+
 Esto hace falta para git y poco más. Dos formas:
 
 1. Explorador de Windows → entrá a la carpeta `TRAGOS RUTA40` → clic en la
@@ -504,6 +600,8 @@ Sabés que estás bien parado porque el renglón donde escribís termina en
 `TRAGOS RUTA40>`.
 
 ### Por qué a veces el mismo comando se escribe distinto
+
+>CLCODE<
 
 En tu máquina conviven dos terminales:
 
@@ -523,6 +621,8 @@ contesta *"no se reconoce como un comando"*, dá vuelta la barra: `.\`
 
 ### Glosario
 
+>CLCODE<
+
 | Palabra | Qué es *en este proyecto* |
 |---|---|
 | **PocketBase** | El servidor. Un solo archivo `.exe` que guarda todos los datos y se los sirve a las tablets por la red WiFi. Es la base de datos y la API juntas |
@@ -541,6 +641,8 @@ contesta *"no se reconoce como un comando"*, dá vuelta la barra: `.\`
 
 ### Si algo falla
 
+>CLCODE<
+
 | Lo que ves | Qué pasó | Qué hacer |
 |---|---|---|
 | `verificar.cmd` dice `FALLA el server responde` | El servidor no está prendido | Doble clic en `arrancar.cmd` primero, después reintentá |
@@ -557,6 +659,8 @@ Para mirar el schema a ojo, con el servidor prendido:
 
 ## 🤖 Qué modelo usar en cada bloque
 
+>CLCODE<
+
 **Dónde se cambia:** el selector de modelo de la app (el control que muestra el
 modelo actual, cerca del cuadro donde escribís). En una terminal `claude`
 interactiva el comando es `/model`.
@@ -565,6 +669,8 @@ interactiva el comando es `/model`.
 todo el contexto. Podés cambiar en la mitad de un bloque sin perder nada.
 
 ### La regla, en una pregunta
+
+>CLCODE<
 
 > **Si esto sale mal, ¿cuándo me entero?**
 >
@@ -581,6 +687,8 @@ cruzan → Opus.
 
 ### Bloque por bloque
 
+>CLCODE<
+
 | Bloque | Modelo | Cambiás de vuelta cuando... |
 |---|---|---|
 | Diseño, decisiones, briefs (Claude Chat) | **Opus 5** | Nunca. Esta parte es puro decidir |
@@ -594,6 +702,8 @@ cruzan → Opus.
 
 ### El protocolo, resumido
 
+>CLCODE<
+
 ```
 Opus  →  brief y diseño del bloque
   ↓
@@ -603,6 +713,8 @@ Opus  →  una pasada de revisión, solo si toca plata o estados
 ```
 
 ### Dónde no coincido del todo con la recomendación del Chat
+
+>CLCODE<
 
 El Chat puso `[HOOKS]` dentro de *"el grueso: CRUD, pantallas, PocketBase →
 Sonnet"*. **Yo lo saco de ahí y lo paso a Opus.** Los hooks no son CRUD: son la
@@ -616,6 +728,8 @@ justo donde Sonnet rinde y te estira los límites semanales.
 
 ### Aviso honesto
 
+>CLCODE<
+
 Esto es criterio por **forma de la tarea** — cuánto contexto hay que sostener y
 qué tan silencioso es el error — no una medición sobre este código. Si un bloque
 con Sonnet te sale raro dos veces seguidas, pasalo a Opus y no lo pienses más:
@@ -625,6 +739,8 @@ sale más barato que un arqueo que no cierra.
 
 ## 🚀 Cómo arrancar la próxima sesión
 
+>CLCODE<
+
 1. Leer `CLAUDE.md` (convenciones, estructura, NO ROMPER, stack)
 2. Leer `docs/MODELO-DATOS.md` (tablas, estados, reglas duras)
 3. Leer este archivo completo
@@ -632,6 +748,8 @@ sale más barato que un arqueo que no cierra.
 5. Si no hay tarea: ofrecer la lista de pendientes de abajo
 
 ### Pendientes
+
+>CLCODE<
 
 1. **UI de caja** (`caja.html`) y **de barra** (`barra.html`). El server ya
    valida todo, así que las pantallas son "mostrar y mandar". **Va en Sonnet 5.**
@@ -641,6 +759,8 @@ sale más barato que un arqueo que no cierra.
 5. **Decidir el hardware del server.** Ver el riesgo del reloj más abajo.
 
 ### Reglas de oro al arrancar
+
+>CLCODE<
 
 - Antes de cambios grandes o riesgosos: explicar el riesgo a Alejo y dar opciones
 - Bumpear el SW al tocar cualquier archivo de `web/`
