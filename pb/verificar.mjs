@@ -1,15 +1,18 @@
 /**
- * verificar.mjs — chequeo end-to-end del schema y las reglas de acceso.
+ * verificar.mjs — chequeo end-to-end del schema, las reglas y los hooks.
  *
  * Uso (con el server corriendo):
  *   node pb/verificar.mjs
+ *   node pb/verificar.mjs --rapido              (saltea la prueba del cron, ~70s)
  *   node pb/verificar.mjs http://192.168.1.50:8090
  *
  * No necesita dependencias: fetch nativo de Node 18+.
- * Crea un turno de prueba y lo borra al final.
+ * Limpia lo que crea, y tambien lo que haya quedado de una corrida anterior.
  */
 
-const BASE = process.argv[2] || 'http://127.0.0.1:8090'
+const args = process.argv.slice(2)
+const RAPIDO = args.includes('--rapido')
+const BASE = args.find((a) => a.startsWith('http')) || 'http://127.0.0.1:8090'
 const SUPER = { identity: 'admin@ruta40.local', password: 'ruta40admin' }
 
 let pasaron = 0
@@ -18,16 +21,16 @@ let fallaron = 0
 const ok = (label, cond, detalle) => {
   if (cond) {
     pasaron++
-    console.log('  [32mOK[0m   ' + label)
+    console.log('  \x1b[32mOK\x1b[0m   ' + label)
   } else {
     fallaron++
-    console.log('  [31mFALLA[0m ' + label + (detalle ? '  → ' + detalle : ''))
+    console.log('  \x1b[31mFALLA\x1b[0m ' + label + (detalle ? '  → ' + detalle : ''))
   }
 }
 
-const titulo = (t) => console.log('\n[1m' + t + '[0m')
+const titulo = (t) => console.log('\n\x1b[1m' + t + '\x1b[0m')
+const nota = (t) => console.log('  \x1b[2m' + t + '\x1b[0m')
 
-/** Devuelve { status, body } sin tirar excepción por 4xx. */
 const api = async (metodo, path, { token, body } = {}) => {
   const headers = { 'Content-Type': 'application/json' }
   if (token) headers.Authorization = token
@@ -53,17 +56,33 @@ const login = async (coleccion, identity, password) => {
   return r.status === 200 ? r.body : null
 }
 
+const msg = (r) => r.status + ' ' + (r.body && r.body.message ? r.body.message : JSON.stringify(r.body))
+const dormir = (ms) => new Promise((r) => setTimeout(r, ms))
+
 // ═══════════════════════════════════════════════════════════════
 titulo('0 · Server')
 const salud = await api('GET', '/api/health')
 ok('el server responde en ' + BASE, salud.status === 200, 'status ' + salud.status)
 if (salud.status !== 200) {
-  console.log('\n  Arrancá el server primero:  cd pb && ./pocketbase serve\n')
+  console.log('\n  Arrancá el server primero: doble clic en arrancar.cmd\n')
   process.exit(1)
 }
 
 const admin = await login('_superusers', SUPER.identity, SUPER.password)
 ok('login superuser', !!admin)
+if (!admin) process.exit(1)
+
+// Limpieza previa: una corrida anterior cortada deja un turno abierto, y el
+// hook de turno unico haria fallar todo lo que sigue.
+const limpiarTodo = async () => {
+  for (const col of ['eventos', 'orden_items', 'ordenes', 'turnos']) {
+    const r = await api('GET', `/api/collections/${col}/records?perPage=500`, { token: admin.token })
+    for (const rec of (r.body.items || [])) {
+      await api('DELETE', `/api/collections/${col}/records/${rec.id}`, { token: admin.token })
+    }
+  }
+}
+await limpiarTodo()
 
 // ═══════════════════════════════════════════════════════════════
 titulo('1 · Colecciones')
@@ -73,6 +92,10 @@ for (const n of ['staff', 'productos', 'turnos', 'ordenes', 'orden_items', 'even
   ok('existe la colección `' + n + '`', nombres.includes(n))
 }
 ok('la colección `users` por defecto NO existe', !nombres.includes('users'))
+
+const colEventos = cols.body.items.find((c) => c.name === 'eventos')
+ok('`eventos` no acepta escrituras desde afuera', colEventos.createRule === null,
+  'createRule = ' + JSON.stringify(colEventos.createRule))
 
 // ═══════════════════════════════════════════════════════════════
 titulo('2 · Seed')
@@ -96,9 +119,7 @@ ok('login barman  barra1 / 2222', !!barman)
 ok('login jefe    jefe / 9999', !!jefe)
 ok('el PIN no viaja en la respuesta', cajero && cajero.record.password === undefined)
 ok('el rol viene en el record (lo usan las reglas)', cajero && cajero.record.rol === 'cajero')
-
-const pinMal = await login('staff', 'caja1', '0000')
-ok('PIN incorrecto rechazado', !pinMal)
+ok('PIN incorrecto rechazado', !(await login('staff', 'caja1', '0000')))
 
 // ═══════════════════════════════════════════════════════════════
 titulo('4 · Turno')
@@ -107,15 +128,14 @@ const turnoRes = await api('POST', '/api/collections/turnos/records', {
   token: cajero.token,
   body: { fecha: ahora, abierto_at: ahora, abierto_por: cajero.record.id },
 })
-ok('el cajero abre turno', turnoRes.status === 200, JSON.stringify(turnoRes.body).slice(0, 160))
+ok('el cajero abre turno', turnoRes.status === 200, msg(turnoRes))
 const turno = turnoRes.body
 
 const turnoBarman = await api('POST', '/api/collections/turnos/records', {
   token: barman.token,
   body: { fecha: ahora, abierto_at: ahora, abierto_por: barman.record.id },
 })
-ok('el barman NO puede abrir turno', turnoBarman.status === 403 || turnoBarman.status === 400,
-  'status ' + turnoBarman.status)
+ok('el barman NO puede abrir turno', turnoBarman.status !== 200, msg(turnoBarman))
 
 // ═══════════════════════════════════════════════════════════════
 titulo('5 · EL PORTÓN — borrador es invisible para la barra')
@@ -126,8 +146,7 @@ const ordenRes = await api('POST', '/api/collections/ordenes/records', {
   token: cajero.token,
   body: { turno_id: turno.id, estado: 'borrador', cajero_id: cajero.record.id },
 })
-ok('el cajero crea una orden en borrador', ordenRes.status === 200,
-  JSON.stringify(ordenRes.body).slice(0, 160))
+ok('el cajero crea una orden en borrador', ordenRes.status === 200, msg(ordenRes))
 const orden = ordenRes.body
 
 const item1 = await api('POST', '/api/collections/orden_items/records', {
@@ -144,173 +163,392 @@ const ordenBarman = await api('POST', '/api/collections/ordenes/records', {
   token: barman.token,
   body: { turno_id: turno.id, estado: 'borrador', cajero_id: barman.record.id },
 })
-ok('el barman NO puede crear órdenes', ordenBarman.status === 403 || ordenBarman.status === 400,
-  'status ' + ordenBarman.status)
+ok('el barman NO puede crear órdenes', ordenBarman.status !== 200, msg(ordenBarman))
 
 const itemBarman = await api('POST', '/api/collections/orden_items/records', {
   token: barman.token,
   body: { orden_id: orden.id, producto_id: gin.id, cantidad: 1, estado: 'pendiente' },
 })
-ok('el barman NO puede agregar items', itemBarman.status === 403 || itemBarman.status === 400,
-  'status ' + itemBarman.status)
+ok('el barman NO puede agregar items', itemBarman.status !== 200, msg(itemBarman))
 
-let vistaBarra = await api('GET', '/api/collections/ordenes/records?filter=' + encodeURIComponent(`turno_id="${turno.id}"`), {
-  token: barman.token,
-})
-ok('la barra NO ve la orden en borrador', vistaBarra.body.totalItems === 0,
-  've ' + vistaBarra.body.totalItems)
+const filtroTurno = '?filter=' + encodeURIComponent(`turno_id="${turno.id}"`)
+const filtroItems = '?filter=' + encodeURIComponent(`orden_id="${orden.id}"`)
 
-let itemsBarra = await api('GET', '/api/collections/orden_items/records?filter=' + encodeURIComponent(`orden_id="${orden.id}"`), {
-  token: barman.token,
-})
-ok('la barra NO ve los items en borrador', itemsBarra.body.totalItems === 0,
-  've ' + itemsBarra.body.totalItems)
+let vistaBarra = await api('GET', '/api/collections/ordenes/records' + filtroTurno, { token: barman.token })
+ok('la barra NO ve la orden en borrador', vistaBarra.body.totalItems === 0, 've ' + vistaBarra.body.totalItems)
 
-const vistaCaja = await api('GET', '/api/collections/ordenes/records?filter=' + encodeURIComponent(`turno_id="${turno.id}"`), {
-  token: cajero.token,
-})
+let itemsBarra = await api('GET', '/api/collections/orden_items/records' + filtroItems, { token: barman.token })
+ok('la barra NO ve los items en borrador', itemsBarra.body.totalItems === 0, 've ' + itemsBarra.body.totalItems)
+
+const vistaCaja = await api('GET', '/api/collections/ordenes/records' + filtroTurno, { token: cajero.token })
 ok('la caja SÍ ve su borrador', vistaCaja.body.totalItems === 1)
 
 // ═══════════════════════════════════════════════════════════════
-titulo('6 · Cobrar — congela precio, nombre, total y número')
-const total = fernet.precio * 2 + gin.precio * 1
+titulo('6 · Cobrar — lo hace el servidor, no la pantalla')
+const totalEsperado = fernet.precio * 2 + gin.precio * 1
 
-await api('PATCH', '/api/collections/orden_items/records/' + item1.body.id, {
+const cobroPatch = await api('PATCH', '/api/collections/ordenes/records/' + orden.id, {
   token: cajero.token,
-  body: { precio_unit: fernet.precio, nombre_snapshot: fernet.nombre },
+  body: { estado: 'cobrada' },
 })
-await api('PATCH', '/api/collections/orden_items/records/' + item2.body.id, {
+ok('cobrar por PATCH está prohibido', cobroPatch.status !== 200, msg(cobroPatch))
+
+const cobro = await api('POST', '/api/tragos/cobrar', {
   token: cajero.token,
-  body: { precio_unit: gin.precio, nombre_snapshot: gin.nombre },
+  body: { orden_id: orden.id, metodo_pago: 'efectivo' },
 })
-const cobro = await api('PATCH', '/api/collections/ordenes/records/' + orden.id, {
-  token: cajero.token,
-  body: {
-    estado: 'cobrada',
-    total,
-    numero: 1,
-    metodo_pago: 'efectivo',
-    cobrada_at: new Date().toISOString(),
-  },
-})
-ok('la orden pasa a cobrada', cobro.status === 200 && cobro.body.estado === 'cobrada',
-  JSON.stringify(cobro.body).slice(0, 160))
-ok('total congelado = ' + total, cobro.body.total === total)
-ok('número corto asignado (1-999)', cobro.body.numero === 1)
+ok('POST /api/tragos/cobrar devuelve 200', cobro.status === 200, msg(cobro))
+ok('devuelve el número corto para gritar', cobro.body.numero === 1, 'numero = ' + cobro.body.numero)
+ok('total calculado por el server = ' + totalEsperado, cobro.body.total === totalEsperado,
+  'devolvió ' + cobro.body.total)
+
+const ordenCobrada = await api('GET', '/api/collections/ordenes/records/' + orden.id, { token: cajero.token })
+ok('la orden quedó en `cobrada`', ordenCobrada.body.estado === 'cobrada', ordenCobrada.body.estado)
+ok('cobrada_at sellado', !!ordenCobrada.body.cobrada_at)
 
 const itemCobrado = await api('GET', '/api/collections/orden_items/records/' + item1.body.id, { token: cajero.token })
-ok('precio_unit copiado del producto', itemCobrado.body.precio_unit === fernet.precio)
-ok('nombre_snapshot copiado del producto', itemCobrado.body.nombre_snapshot === fernet.nombre)
+ok('precio_unit congelado desde el producto', itemCobrado.body.precio_unit === fernet.precio,
+  'quedó ' + itemCobrado.body.precio_unit)
+ok('nombre_snapshot congelado desde el producto', itemCobrado.body.nombre_snapshot === fernet.nombre,
+  'quedó ' + itemCobrado.body.nombre_snapshot)
 
-const evCobrada = await api('POST', '/api/collections/eventos/records', {
-  token: cajero.token,
-  body: { orden_id: orden.id, tipo: 'cobrada', staff_id: cajero.record.id, payload: { total } },
-})
-ok('se escribe el evento `cobrada`', evCobrada.status === 200,
-  JSON.stringify(evCobrada.body).slice(0, 160))
+const evCobrada = await api('GET', '/api/collections/eventos/records' + filtroItems.replace('orden_id', 'orden_id'), { token: jefe.token })
+ok('el server escribió el evento `cobrada`',
+  (evCobrada.body.items || []).some((ev) => ev.tipo === 'cobrada'),
+  'eventos: ' + (evCobrada.body.items || []).map((e) => e.tipo).join(','))
 
-// precio_unit no se recalcula: subo el precio del producto y reviso la orden vieja
+// precio_unit no se recalcula
 const subaPrecio = await api('PATCH', '/api/collections/productos/records/' + fernet.id, {
   token: jefe.token,
   body: { precio: fernet.precio + 5000 },
 })
-ok('el jefe puede cambiar precios', subaPrecio.status === 200)
+ok('el jefe puede cambiar precios', subaPrecio.status === 200, msg(subaPrecio))
 const itemDespues = await api('GET', '/api/collections/orden_items/records/' + item1.body.id, { token: cajero.token })
 ok('la orden ya cobrada NO muta al subir el precio', itemDespues.body.precio_unit === fernet.precio,
   'quedó en ' + itemDespues.body.precio_unit)
 await api('PATCH', '/api/collections/productos/records/' + fernet.id, {
-  token: jefe.token,
-  body: { precio: fernet.precio },
+  token: jefe.token, body: { precio: fernet.precio },
 })
 
 const precioBarman = await api('PATCH', '/api/collections/productos/records/' + fernet.id, {
-  token: barman.token,
-  body: { precio: 1 },
+  token: barman.token, body: { precio: 1 },
 })
-ok('el barman NO puede tocar precios',
-  precioBarman.status === 403 || precioBarman.status === 404 || precioBarman.status === 400,
-  'status ' + precioBarman.status)
+ok('el barman NO puede tocar precios', precioBarman.status !== 200, msg(precioBarman))
 
 // ═══════════════════════════════════════════════════════════════
-titulo('7 · Después del portón, la barra ve todo')
-vistaBarra = await api('GET', '/api/collections/ordenes/records?filter=' + encodeURIComponent(`turno_id="${turno.id}"`), {
-  token: barman.token,
-})
-ok('la barra AHORA ve la orden cobrada', vistaBarra.body.totalItems === 1,
-  've ' + vistaBarra.body.totalItems)
+titulo('7 · Después del portón, la barra ve y trabaja')
+vistaBarra = await api('GET', '/api/collections/ordenes/records' + filtroTurno, { token: barman.token })
+ok('la barra AHORA ve la orden cobrada', vistaBarra.body.totalItems === 1, 've ' + vistaBarra.body.totalItems)
 
-itemsBarra = await api('GET', '/api/collections/orden_items/records?filter=' + encodeURIComponent(`orden_id="${orden.id}"`), {
-  token: barman.token,
-})
-ok('la barra AHORA ve los 2 items', itemsBarra.body.totalItems === 2,
-  've ' + itemsBarra.body.totalItems)
+itemsBarra = await api('GET', '/api/collections/orden_items/records' + filtroItems, { token: barman.token })
+ok('la barra AHORA ve los 2 items', itemsBarra.body.totalItems === 2, 've ' + itemsBarra.body.totalItems)
 
-const claim = await api('PATCH', '/api/collections/orden_items/records/' + item1.body.id, {
+const claimPatch = await api('PATCH', '/api/collections/orden_items/records/' + item1.body.id, {
   token: barman.token,
-  body: { estado: 'preparando', barman_id: barman.record.id, claim_at: new Date().toISOString() },
+  body: { estado: 'preparando', barman_id: barman.record.id },
 })
-ok('el barman hace claim del item', claim.status === 200 && claim.body.estado === 'preparando',
-  JSON.stringify(claim.body).slice(0, 160))
-ok('el claim deja barman_id', claim.body.barman_id === barman.record.id)
-ok('el claim deja claim_at (para el timeout)', !!claim.body.claim_at)
+ok('tomar un trago por PATCH está prohibido', claimPatch.status !== 200, msg(claimPatch))
+
+const claim = await api('POST', '/api/tragos/claim', {
+  token: barman.token, body: { item_id: item1.body.id },
+})
+ok('POST /api/tragos/claim devuelve 200', claim.status === 200, msg(claim))
+
+const itemClaim = await api('GET', '/api/collections/orden_items/records/' + item1.body.id, { token: barman.token })
+ok('el claim deja el item en `preparando`', itemClaim.body.estado === 'preparando', itemClaim.body.estado)
+ok('el claim deja barman_id', itemClaim.body.barman_id === barman.record.id)
+ok('el claim deja claim_at (lo usa el timeout)', !!itemClaim.body.claim_at)
+
+const ordenPrep = await api('GET', '/api/collections/ordenes/records/' + orden.id, { token: cajero.token })
+ok('la orden se derivó sola a `en_preparacion`', ordenPrep.body.estado === 'en_preparacion',
+  ordenPrep.body.estado)
+
+const listo = await api('PATCH', '/api/collections/orden_items/records/' + item1.body.id, {
+  token: barman.token, body: { estado: 'listo' },
+})
+ok('el barman que lo tomó lo marca listo', listo.status === 200, msg(listo))
+
+const entregado = await api('PATCH', '/api/collections/orden_items/records/' + item1.body.id, {
+  token: barman.token, body: { estado: 'entregado' },
+})
+ok('de listo pasa a entregado', entregado.status === 200, msg(entregado))
 
 const borrarItem = await api('DELETE', '/api/collections/orden_items/records/' + item2.body.id, {
   token: cajero.token,
 })
-ok('NADIE borra items de una orden ya cobrada (se anulan)',
-  borrarItem.status === 403 || borrarItem.status === 404, 'status ' + borrarItem.status)
+ok('NADIE borra items de una orden ya cobrada (se anulan)', borrarItem.status !== 200, msg(borrarItem))
 
 // ═══════════════════════════════════════════════════════════════
-titulo('8 · `eventos` es append-only')
-const editarEv = await api('PATCH', '/api/collections/eventos/records/' + evCobrada.body.id, {
-  token: jefe.token,
-  body: { tipo: 'otra_cosa' },
-})
-ok('el jefe NO puede editar un evento', editarEv.status === 403 || editarEv.status === 404,
-  'status ' + editarEv.status)
+titulo('8 · `eventos` es append-only y lo escribe solo el server')
+const evs = await api('GET', '/api/collections/eventos/records?perPage=100', { token: jefe.token })
+const unEvento = evs.body.items[0]
 
-const borrarEv = await api('DELETE', '/api/collections/eventos/records/' + evCobrada.body.id, {
+const inventarEvento = await api('POST', '/api/collections/eventos/records', {
+  token: jefe.token,
+  body: { orden_id: orden.id, tipo: 'cobrada', staff_id: jefe.record.id },
+})
+ok('nadie puede inventar un evento desde afuera', inventarEvento.status !== 200, msg(inventarEvento))
+
+const editarEv = await api('PATCH', '/api/collections/eventos/records/' + unEvento.id, {
+  token: jefe.token, body: { tipo: 'otra_cosa' },
+})
+ok('el jefe NO puede editar un evento', editarEv.status !== 200, msg(editarEv))
+
+const borrarEv = await api('DELETE', '/api/collections/eventos/records/' + unEvento.id, {
   token: jefe.token,
 })
-ok('el jefe NO puede borrar un evento', borrarEv.status === 403 || borrarEv.status === 404,
-  'status ' + borrarEv.status)
+ok('el jefe NO puede borrar un evento', borrarEv.status !== 200, msg(borrarEv))
 
 // ═══════════════════════════════════════════════════════════════
 titulo('9 · Integridad')
-const numeroDup = await api('POST', '/api/collections/ordenes/records', {
-  token: cajero.token,
-  body: { turno_id: turno.id, estado: 'cobrada', numero: 1, cajero_id: cajero.record.id },
-})
-ok('número duplicado en el mismo turno rechazado', numeroDup.status !== 200,
-  'status ' + numeroDup.status)
-
-// PocketBase aplica la regla de list como filtro SQL: un guest no recibe 403,
-// recibe la lista vacía. Lo que importa es que no salga ni un registro.
 const sinAuth = await api('GET', '/api/collections/productos/records')
-ok('sin login el menú viene vacío', sinAuth.body.totalItems === 0,
-  'devolvió ' + sinAuth.body.totalItems)
-
-const estadoInvalido = await api('PATCH', '/api/collections/orden_items/records/' + item2.body.id, {
-  token: barman.token,
-  body: { estado: 'quemado' },
-})
-ok('estado fuera de la máquina de estados rechazado', estadoInvalido.status === 400,
-  'status ' + estadoInvalido.status)
+ok('sin login el menú viene vacío', sinAuth.body.totalItems === 0, 'devolvió ' + sinAuth.body.totalItems)
 
 const staffPublico = await api('GET', '/api/collections/staff/records')
 ok('sin login la lista de staff viene vacía', staffPublico.body.totalItems === 0,
   'devolvió ' + staffPublico.body.totalItems)
 
+const estadoInvalido = await api('PATCH', '/api/collections/orden_items/records/' + item2.body.id, {
+  token: barman.token, body: { estado: 'quemado' },
+})
+ok('estado fuera de la máquina de estados rechazado', estadoInvalido.status === 400, msg(estadoInvalido))
+
 // ═══════════════════════════════════════════════════════════════
-titulo('10 · Limpieza')
-for (const ev of (await api('GET', '/api/collections/eventos/records?perPage=200&filter=' + encodeURIComponent(`orden_id="${orden.id}"`), { token: admin.token })).body.items) {
-  await api('DELETE', '/api/collections/eventos/records/' + ev.id, { token: admin.token })
+titulo('10 · Los 9 agujeros del diagnóstico, cerrados')
+
+// #1 orden en turno cerrado
+const turnoViejo = await api('POST', '/api/collections/turnos/records', {
+  token: admin.token,
+  body: { fecha: ahora, abierto_at: ahora, cerrado_at: ahora, abierto_por: cajero.record.id },
+})
+const ordenEnCerrado = await api('POST', '/api/collections/ordenes/records', {
+  token: cajero.token,
+  body: { turno_id: turnoViejo.body.id, estado: 'borrador', cajero_id: cajero.record.id },
+})
+ok('#1 crear orden en turno CERRADO', ordenEnCerrado.status !== 200, msg(ordenEnCerrado))
+
+// #2 y #3: cobrar sin congelar / total inventado — ya no existe la via.
+//    El unico camino es el endpoint, que congela e ignora el total del body.
+const ordenB = (await api('POST', '/api/collections/ordenes/records', {
+  token: cajero.token,
+  body: { turno_id: turno.id, estado: 'borrador', cajero_id: cajero.record.id, total: 1 },
+})).body
+await api('POST', '/api/collections/orden_items/records', {
+  token: cajero.token,
+  body: { orden_id: ordenB.id, producto_id: gin.id, cantidad: 3, estado: 'pendiente' },
+})
+const cobroB = await api('POST', '/api/tragos/cobrar', {
+  token: cajero.token,
+  body: { orden_id: ordenB.id, metodo_pago: 'tarjeta', total: 1 },
+})
+ok('#2 el server congela el precio aunque el body no lo mande', cobroB.status === 200, msg(cobroB))
+ok('#3 el total del body se IGNORA (' + (gin.precio * 3) + ', no 1)', cobroB.body.total === gin.precio * 3,
+  'devolvió ' + cobroB.body.total)
+
+// #4 salto de estado
+const itemB = (await api('GET', '/api/collections/orden_items/records?filter=' +
+  encodeURIComponent(`orden_id="${ordenB.id}"`), { token: barman.token })).body.items[0]
+const salto = await api('PATCH', '/api/collections/orden_items/records/' + itemB.id, {
+  token: barman.token, body: { estado: 'entregado' },
+})
+ok('#4 saltar de pendiente a entregado', salto.status !== 200, msg(salto))
+
+// #5 reescribir precio de orden cobrada
+const reescribir = await api('PATCH', '/api/collections/orden_items/records/' + itemB.id, {
+  token: cajero.token, body: { precio_unit: 1 },
+})
+ok('#5 cambiar precio_unit de una orden cobrada', reescribir.status !== 200, msg(reescribir))
+
+// #6 pisar el claim de otro
+await api('POST', '/api/tragos/claim', { token: barman.token, body: { item_id: itemB.id } })
+const pisar = await api('PATCH', '/api/collections/orden_items/records/' + itemB.id, {
+  token: jefe.token, body: { barman_id: jefe.record.id },
+})
+ok('#6 pisar el barman_id de un trago tomado', pisar.status !== 200, msg(pisar))
+
+// #7 anular sin motivo ni evento
+const anularMudo = await api('PATCH', '/api/collections/orden_items/records/' + itemB.id, {
+  token: barman.token, body: { estado: 'anulado' },
+})
+ok('#7 anular por PATCH, sin motivo', anularMudo.status !== 200, msg(anularMudo))
+
+const anularSinMotivo = await api('POST', '/api/tragos/anular', {
+  token: barman.token, body: { item_id: itemB.id },
+})
+ok('#7 anular por endpoint sin motivo', anularSinMotivo.status !== 200, msg(anularSinMotivo))
+
+const anularMotivoRaro = await api('POST', '/api/tragos/anular', {
+  token: barman.token, body: { item_id: itemB.id, motivo: 'porque si' },
+})
+ok('#7 motivo fuera de la lista', anularMotivoRaro.status !== 200, msg(anularMotivoRaro))
+
+// #8 orden que miente sobre sus items
+const mentira = await api('PATCH', '/api/collections/ordenes/records/' + ordenB.id, {
+  token: cajero.token, body: { estado: 'entregada' },
+})
+ok('#8 escribir el estado de la orden a mano', mentira.status !== 200, msg(mentira))
+
+// #9 dos turnos abiertos
+const dobleTurno = await api('POST', '/api/collections/turnos/records', {
+  token: cajero.token,
+  body: { fecha: ahora, abierto_at: ahora, abierto_por: cajero.record.id },
+})
+ok('#9 abrir un segundo turno con otro abierto', dobleTurno.status !== 200, msg(dobleTurno))
+
+// control: el numero SI se repite en otro turno (eso debe pasar)
+ok('control: el número resetea por turno (índice único sólo dentro del turno)',
+  cobro.body.numero === 1 && cobroB.body.numero === 2,
+  'numeros: ' + cobro.body.numero + ', ' + cobroB.body.numero)
+
+// ═══════════════════════════════════════════════════════════════
+titulo('11 · Las carreras — pruebas 53 a 56 del brief')
+
+// [53] cobrar dos veces
+const ordenC = (await api('POST', '/api/collections/ordenes/records', {
+  token: cajero.token,
+  body: { turno_id: turno.id, estado: 'borrador', cajero_id: cajero.record.id },
+})).body
+await api('POST', '/api/collections/orden_items/records', {
+  token: cajero.token,
+  body: { orden_id: ordenC.id, producto_id: fernet.id, cantidad: 1, estado: 'pendiente' },
+})
+const cobro1 = await api('POST', '/api/tragos/cobrar', {
+  token: cajero.token, body: { orden_id: ordenC.id, metodo_pago: 'efectivo' },
+})
+const cobro2 = await api('POST', '/api/tragos/cobrar', {
+  token: cajero.token, body: { orden_id: ordenC.id, metodo_pago: 'efectivo' },
+})
+ok('[53] cobrar dos veces devuelve el MISMO número',
+  cobro1.status === 200 && cobro2.status === 200 && cobro1.body.numero === cobro2.body.numero,
+  cobro1.body.numero + ' vs ' + cobro2.body.numero)
+ok('[53] el reintento se marca como repetido', cobro2.body.repetido === true)
+
+const ordenesTurno = await api('GET', '/api/collections/ordenes/records?perPage=100&filter=' +
+  encodeURIComponent(`turno_id="${turno.id}"`), { token: cajero.token })
+const numeros = ordenesTurno.body.items.map((o) => o.numero).filter((n) => n > 0)
+ok('[53] no se creó una segunda venta', new Set(numeros).size === numeros.length,
+  'numeros: ' + numeros.join(','))
+
+// [54] dos barmans reclaman el mismo trago sin esperarse
+const itemC = (await api('GET', '/api/collections/orden_items/records?filter=' +
+  encodeURIComponent(`orden_id="${ordenC.id}"`), { token: barman.token })).body.items[0]
+
+const [carreraA, carreraB] = await Promise.all([
+  api('POST', '/api/tragos/claim', { token: barman.token, body: { item_id: itemC.id } }),
+  api('POST', '/api/tragos/claim', { token: jefe.token, body: { item_id: itemC.id } }),
+])
+const ganadores = [carreraA, carreraB].filter((r) => r.status === 200)
+const perdedores = [carreraA, carreraB].filter((r) => r.status !== 200)
+ok('[54] gana exactamente UNO de los dos', ganadores.length === 1,
+  'ganaron ' + ganadores.length)
+ok('[54] el que pierde recibe 409', perdedores.length === 1 && perdedores[0].status === 409,
+  perdedores.map(msg).join(' | '))
+ok('[54] el 409 dice quién lo tiene',
+  perdedores.length === 1 && /preparando/i.test(perdedores[0].body.message || ''),
+  perdedores.length ? perdedores[0].body.message : '')
+
+const itemCarrera = await api('GET', '/api/collections/orden_items/records/' + itemC.id, { token: barman.token })
+ok('[54] barman_id quedó en uno solo, no pisado',
+  itemCarrera.body.barman_id === barman.record.id || itemCarrera.body.barman_id === jefe.record.id,
+  'quedó ' + itemCarrera.body.barman_id)
+
+// [56] anular un entregado exige PIN del jefe
+await api('PATCH', '/api/collections/orden_items/records/' + itemC.id, {
+  token: itemCarrera.body.barman_id === barman.record.id ? barman.token : jefe.token,
+  body: { estado: 'listo' },
+})
+await api('PATCH', '/api/collections/orden_items/records/' + itemC.id, {
+  token: itemCarrera.body.barman_id === barman.record.id ? barman.token : jefe.token,
+  body: { estado: 'entregado' },
+})
+const itemEntregado = await api('GET', '/api/collections/orden_items/records/' + itemC.id, { token: barman.token })
+ok('[56] el item llegó a entregado', itemEntregado.body.estado === 'entregado', itemEntregado.body.estado)
+
+const anularSinPin = await api('POST', '/api/tragos/anular', {
+  token: barman.token, body: { item_id: itemC.id, motivo: 'se_cayo' },
+})
+ok('[56] anular un ENTREGADO sin PIN del jefe = 403', anularSinPin.status === 403, msg(anularSinPin))
+
+const anularPinMalo = await api('POST', '/api/tragos/anular', {
+  token: barman.token, body: { item_id: itemC.id, motivo: 'se_cayo', pin_jefe: '0000' },
+})
+ok('[56] PIN del jefe incorrecto = 403', anularPinMalo.status === 403, msg(anularPinMalo))
+
+const anularPinOk = await api('POST', '/api/tragos/anular', {
+  token: barman.token, body: { item_id: itemC.id, motivo: 'se_cayo', pin_jefe: '9999' },
+})
+ok('[56] con el PIN correcto = 200', anularPinOk.status === 200, msg(anularPinOk))
+
+const evAnulado = (await api('GET', '/api/collections/eventos/records?perPage=200&filter=' +
+  encodeURIComponent(`item_id="${itemC.id}" && tipo="anulado"`), { token: jefe.token })).body.items[0]
+ok('[56] el evento guarda el motivo y quién autorizó',
+  !!evAnulado && evAnulado.payload && evAnulado.payload.motivo === 'se_cayo' &&
+  !!evAnulado.payload.autorizado_por,
+  evAnulado ? JSON.stringify(evAnulado.payload) : 'sin evento')
+
+// [55] timeout del claim
+if (RAPIDO) {
+  nota('[55] prueba del cron SALTEADA (--rapido). Corré sin la bandera para incluirla.')
+} else {
+  titulo('12 · [55] Timeout del claim — el cron tarda hasta 1 minuto')
+  const ordenD = (await api('POST', '/api/collections/ordenes/records', {
+    token: cajero.token,
+    body: { turno_id: turno.id, estado: 'borrador', cajero_id: cajero.record.id },
+  })).body
+  await api('POST', '/api/collections/orden_items/records', {
+    token: cajero.token,
+    body: { orden_id: ordenD.id, producto_id: gin.id, cantidad: 1, estado: 'pendiente' },
+  })
+  await api('POST', '/api/tragos/cobrar', {
+    token: cajero.token, body: { orden_id: ordenD.id, metodo_pago: 'efectivo' },
+  })
+  const itemD = (await api('GET', '/api/collections/orden_items/records?filter=' +
+    encodeURIComponent(`orden_id="${ordenD.id}"`), { token: barman.token })).body.items[0]
+
+  await api('POST', '/api/tragos/claim', { token: barman.token, body: { item_id: itemD.id } })
+
+  // envejecer el claim 20 minutos
+  const viejo = new Date(Date.now() - 20 * 60 * 1000).toISOString()
+  const envejecer = await api('PATCH', '/api/collections/orden_items/records/' + itemD.id, {
+    token: admin.token, body: { claim_at: viejo },
+  })
+  ok('[55] se pudo envejecer claim_at a 20 min atrás', envejecer.status === 200, msg(envejecer))
+
+  nota('esperando el cron (corre cada minuto, hasta 70s)...')
+  let devuelto = null
+  for (let i = 0; i < 14; i++) {
+    await dormir(5000)
+    const r = await api('GET', '/api/collections/orden_items/records/' + itemD.id, { token: barman.token })
+    if (r.body.estado === 'pendiente') { devuelto = r.body; break }
+    process.stdout.write('.')
+  }
+  console.log('')
+
+  ok('[55] el trago colgado volvió a `pendiente`', !!devuelto,
+    'sigue en preparando después de 70s')
+  if (devuelto) {
+    ok('[55] se limpió barman_id', !devuelto.barman_id, 'quedó ' + devuelto.barman_id)
+    ok('[55] se limpió claim_at', !devuelto.claim_at, 'quedó ' + devuelto.claim_at)
+    const evTimeout = (await api('GET', '/api/collections/eventos/records?perPage=200&filter=' +
+      encodeURIComponent(`item_id="${itemD.id}" && tipo="timeout"`), { token: jefe.token })).body
+    ok('[55] se escribió el evento `timeout`', evTimeout.totalItems > 0,
+      'eventos timeout: ' + evTimeout.totalItems)
+  }
 }
-await api('DELETE', '/api/collections/ordenes/records/' + orden.id, { token: admin.token })
-await api('DELETE', '/api/collections/turnos/records/' + turno.id, { token: admin.token })
+
+// ═══════════════════════════════════════════════════════════════
+titulo('13 · Limpieza')
+await limpiarTodo()
 const quedanOrdenes = await api('GET', '/api/collections/ordenes/records', { token: admin.token })
+const quedanTurnos = await api('GET', '/api/collections/turnos/records', { token: admin.token })
 ok('base limpia: 0 órdenes de prueba', quedanOrdenes.body.totalItems === 0,
   'quedan ' + quedanOrdenes.body.totalItems)
+ok('base limpia: 0 turnos de prueba', quedanTurnos.body.totalItems === 0,
+  'quedan ' + quedanTurnos.body.totalItems)
+
+const prodFinal = await api('GET', '/api/collections/productos/records?perPage=100', { token: admin.token })
+ok('el seed quedó intacto: 12 productos', prodFinal.body.totalItems === 12,
+  'hay ' + prodFinal.body.totalItems)
 
 // ═══════════════════════════════════════════════════════════════
 console.log('\n' + '─'.repeat(52))

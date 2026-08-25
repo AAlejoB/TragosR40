@@ -12,7 +12,7 @@
 | Cómo arrancar, verificar, qué significa cada palabra | [`docs/HISTORIA.md`](docs/HISTORIA.md) § Manual de operación |
 | Qué modelo usar en cada bloque de trabajo | [`docs/HISTORIA.md`](docs/HISTORIA.md) § Qué modelo usar |
 | Instalar PocketBase en una máquina nueva | [`pb/README.md`](pb/README.md) |
-| Qué falta blindar en el servidor y por qué | [`docs/DECISION-HOOKS.md`](docs/DECISION-HOOKS.md) ⏸ esperando decisión del Chat |
+| Por qué el servidor valida lo que valida | [`docs/DECISION-HOOKS.md`](docs/DECISION-HOOKS.md) → [`docs/BRIEF-HOOKS.md`](docs/BRIEF-HOOKS.md) ✅ implementado |
 
 ---
 
@@ -66,13 +66,15 @@ Si una feature necesita internet para funcionar durante la noche, está mal dise
 tragos/
 ├── .gitignore
 ├── arrancar.cmd            ← Doble clic: prende el servidor
-├── verificar.cmd           ← Doble clic: corre los 52 chequeos del schema
+├── verificar.cmd           ← Doble clic: corre los 92 chequeos
 ├── pb/                     ← PocketBase (ejecutable + pb_data + pb_migrations)
 │   ├── pocketbase(.exe)    ← v0.40.1. NO commitear (33 MB) — ver pb/README.md
 │   ├── pb_data/            ← SQLite. NO commitear
 │   ├── pb_migrations/      ← Schema versionado. SÍ commitear
-│   ├── pb_hooks/           ← Reglas de negocio del server (todavía no existe)
-│   ├── verificar.mjs       ← Suite de chequeos del schema (node, sin deps)
+│   ├── pb_hooks/           ← Reglas de negocio del server
+│   │   ├── main.pb.js      ← Endpoints, guardas, derivación y cron
+│   │   └── utils.js        ← Helpers (NO .pb.js: es módulo, no hook)
+│   ├── verificar.mjs       ← Suite de 92 chequeos (node, sin deps)
 │   └── README.md           ← Cómo instalar y arrancar PocketBase
 ├── web/
 │   ├── caja.html           ← Pantalla del cajero
@@ -90,10 +92,11 @@ tragos/
 └── docs/
     ├── MODELO-DATOS.md
     ├── HISTORIA.md
-    └── DECISION-HOOKS.md  ← Decisión abierta, va al Chat
+    ├── DECISION-HOOKS.md  ← Diagnóstico de los 9 agujeros (histórico)
+    └── BRIEF-HOOKS.md     ← La decisión del Chat. Implementada.
 ```
 
-`web/` está vacío a propósito: el Bloque 1 fue solo backend.
+`web/` está vacío a propósito: los bloques 1 a 3 fueron solo backend.
 
 ---
 
@@ -135,12 +138,22 @@ Si no, las tablets siguen viendo la versión vieja.
 ```
 Tipos: `feat`, `fix`, `chore`, `style`, `perf`, `docs`, `refactor`.
 
+### Operación del servidor vs. guarda
+Conviven dos estilos en `pb/pb_hooks/`. La regla para elegir:
+
+> **Operación del servidor** (`POST /api/tragos/...`) si toca plata, o si dos
+> personas pueden hacerla sobre lo mismo al mismo tiempo.
+> **Guarda** (`onRecordUpdateRequest`) si es un campo y un actor.
+
+Hoy son operación: `cobrar`, `claim`, `anular`. Son guarda: las transiciones
+`listo` y `entregado`, el precio congelado y el turno único.
+
 ### Migraciones
 Todo cambio de schema va como migración en `pb/pb_migrations/`. Nunca a mano
 desde el admin UI sin exportar la migración después.
 
-**Después de tocar el schema → correr `node pb/verificar.mjs`.** Tiene que cerrar
-en 0 fallas. Si agregaste una regla nueva, agregale un chequeo.
+**Después de tocar el schema o los hooks → doble clic en `verificar.cmd`.** Tiene
+que cerrar en **0 fallas**. Si agregaste una regla nueva, agregale un chequeo.
 
 ### Nombres en la API vs. el modelo
 Un par de cosas no se llaman igual que en `MODELO-DATOS.md`, por cómo funciona
@@ -160,11 +173,13 @@ PocketBase. El porqué está en `docs/HISTORIA.md` § decisiones 5 y 6.
 
 1. Actualizar `docs/HISTORIA.md` con lo hecho, decisiones y bugs
 2. Actualizar este archivo si cambiaron convenciones o estructura
-3. **Avisarle a Alejo que re-suba `CLAUDE.md`, `HISTORIA.md` y `MODELO-DATOS.md`
-   al knowledge del Proyecto en Claude Chat**
+3. **Code commitea y pushea** al cerrar el bloque (pedíselo explícito:
+   *"commiteá y pusheá"*).
+4. **Alejo aprieta "Sync" en el conector de GitHub** del proyecto en Claude Chat.
+   Sin ese clic, el Chat sigue leyendo el commit anterior.
 
-Sin el paso 3, el chat queda desincronizado y se pierde la continuidad
-arquitectónica. Esta regla existe porque ya pasó en otro proyecto.
+Los pasos 1 y 2 se los podés delegar a Claude Code en la misma frase. Queda
+**un solo clic manual** en vez de tres subidas de archivo.
 
 ---
 

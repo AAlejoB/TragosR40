@@ -16,6 +16,7 @@
 | 24 ago 2026 | **Bloque 1** — esqueleto del repo, PocketBase v0.40.1, schema de las 6 colecciones, reglas por rol, seed y suite de verificación. Sin UI. |
 | 24 ago 2026 | **Bloque 1b** — `arrancar.cmd` y `verificar.cmd` (doble clic, sin terminal), manual de operación y guía de qué modelo usar en cada bloque. |
 | 25 ago 2026 | **Bloque 2** — push inicial a GitHub. Diagnóstico de `[HOOKS]`: 9 agujeros medidos contra el servidor real y 3 opciones de arquitectura. **Frenado a propósito**: la decisión va al Chat. Ver [`DECISION-HOOKS.md`](DECISION-HOOKS.md). |
+| 25 ago 2026 | **Bloque 3** — `[HOOKS]` implementado según [`BRIEF-HOOKS.md`](BRIEF-HOOKS.md). Los 9 agujeros cerrados, `[CLAIM-TIMEOUT]` andando. La suite pasó de 52 a **92 chequeos, 0 fallas**. |
 
 ---
 
@@ -99,6 +100,23 @@ instrucciones de descarga en `pb/README.md`. Lo que SÍ se versiona es
 
 ---
 
+### 8. El reloj del server es un riesgo de hardware sin resolver
+
+**Estado:** abierto. **Decidir antes de comprar la Raspberry Pi.**
+
+**Por qué:** una Raspberry Pi no tiene reloj de hardware con pila. Sin internet
+no hay NTP, así que arranca con la hora donde la dejó, o en 1970. Eso rompe el
+cron del timeout, `cobrada_at`, `entregada_at` y todo el recuento por hora —
+o sea, media razón de existir del sistema.
+
+**Opciones:** un módulo RTC (barato, se suelda a los pines) o usar la notebook
+vieja, que ya tiene pila. La notebook además evita el problema de raíz y no
+cuesta nada.
+
+**Implicancia:** hasta que esto se decida, no comprar hardware.
+
+---
+
 ## 🐛 Bugs significativos
 
 *(vacío — se llena cuando aparezcan)*
@@ -110,6 +128,36 @@ instrucciones de descarga en `pb/README.md`. Lo que SÍ se versiona es
   chequear `totalItems === 0`, no el status code.
 - **Una regla de `update`/`delete` que no matchea da `404`, no `403`** — para no
   filtrar si el registro existe.
+
+### Gotchas de los hooks de PocketBase (Bloque 3)
+
+Estos cinco costaron toda una sesión. Están en orden de cuánto cuesta
+descubrirlos, porque **ninguno da un error que te apunte al problema**.
+
+1. **El archivo tiene que llamarse `*.pb.js`.** Un `main.js` común no se carga
+   y **el server arranca sin decir una palabra**. Se descubre porque los
+   endpoints dan 404 y no hay ni un log. Se confirma buscando `.pb.js` adentro
+   del binario.
+2. **Cada handler corre en su propio runtime de JS.** No ve funciones ni
+   constantes declaradas afuera, en el mismo archivo. Todo se trae con
+   `require()` **adentro** del handler. Por eso
+   `utils.js` NO termina en `.pb.js`: es un módulo, no un hook.
+3. **Por lo mismo, no pasarle callbacks propios a funciones del módulo.** Un
+   wrapper tipo `responder(e, () => {...})` falla raro. El `try/catch` va
+   inline en cada handler.
+4. **`runInTransaction` devuelve `void`** y su callback recibe `txApp`. Hay que
+   usar `txApp` adentro (no `$app`), guardar el resultado en una variable de
+   afuera, y responder **después** de que la transacción cierre.
+5. **Un campo `date` vacío NO es `null`:** es un `DateTime` cero, y en JS todo
+   objeto es *truthy*. `if (turno.get("cerrado_at"))` da `true` **siempre**.
+   Se chequea con `.isZero()` — está envuelto en `utils.sinFecha()`.
+
+**Y uno que no es de PocketBase pero disfrazó de bug lo que no lo era:**
+`JSON.stringify` **borra las claves cuyo valor es `undefined`**. Un turno que
+quedó abierto de una corrida anterior hacía fallar la creación del turno nuevo,
+`turno.id` quedaba `undefined`, y el endpoint contestaba *"Falta orden_id"* —
+un mensaje que apuntaba al lugar equivocado. Por eso `verificar.mjs` ahora
+**limpia la base antes de empezar**, no sólo al final.
 
 ### Gotchas de Windows que ya nos mordieron
 
@@ -204,15 +252,76 @@ criterio de "el bloque está listo".
 
 ---
 
+### Bloque 3 — `[HOOKS]` implementado (25 ago 2026)
+
+**Brief:** [`BRIEF-HOOKS.md`](BRIEF-HOOKS.md), decidido en Claude Chat. Opción C
+corrida: híbrido con `claim` del lado de las operaciones.
+
+**Qué se hizo:**
+
+- `pb/pb_hooks/main.pb.js` — 3 endpoints (`cobrar`, `claim`, `anular`), las
+  guardas de `orden_items` / `ordenes` / `turnos`, la derivación del estado de
+  la orden y el cron del timeout.
+- `pb/pb_hooks/utils.js` — helpers. **No termina en `.pb.js` a propósito**: es
+  un módulo que los handlers traen con `require()`, no un hook.
+- Migración `1787644800_lock_eventos.js` — `eventos.createRule = null`. Ya nadie
+  escribe eventos desde afuera: los escribe el server.
+- Migración `1787648400_eventos_staff_opcional.js` — `staff_id` pasa a opcional.
+- `verificar.mjs` reescrito: **92 chequeos, 0 fallas**.
+
+**Los 9 agujeros del diagnóstico, cerrados y con prueba que lo demuestra:**
+
+| # | Antes pasaba | Ahora |
+|---|---|---|
+| 1 | Vender en un turno cerrado | Rechazado al crear la orden y al cobrar |
+| 2 | Cobrar sin congelar el precio | Imposible: el server lo copia del producto |
+| 3 | Total inventado | El `total` del body se **ignora**, lo suma el server |
+| 4 | Saltar `pendiente` → `entregado` | Sólo transiciones válidas |
+| 5 | Reescribir el precio de una orden cobrada | `precio_unit` inmutable fuera de borrador |
+| 6 | Pisar el claim de otro barman | `barman_id` no se pisa; el claim es atómico |
+| 7 | Anular sin motivo ni evento | Motivo obligatorio de una lista cerrada, evento automático |
+| 8 | Orden que miente sobre sus items | El estado se deriva, no se escribe |
+| 9 | Dos turnos abiertos | Rechazado al crear y al actualizar |
+
+**Dos corrimientos del brief respecto de lo que había recomendado Code, ambos
+acertados:**
+
+1. **`claim` como operación, no como guarda.** Una guarda lee `barman_id` vacío
+   y *después* escribe; en el medio entra el otro barman y los dos pasan. La
+   prueba [54] dispara dos claims en paralelo sin esperarse: gana uno y el otro
+   recibe 409 con el nombre del que ganó.
+2. **La pantalla nunca escribe en `eventos`.** Los escribe el server en cada
+   operación. Eso volvió el agujero 7 imposible en vez de improbable.
+
+**Un cambio de schema que no estaba en el brief:** `eventos.staff_id` pasó a
+opcional. El evento `timeout` lo genera el cron, no una persona; con el campo
+obligatorio el cron devolvía el trago a `pendiente` pero fallaba al escribir el
+evento, y el registro contable quedaba con un agujero justo en el caso que más
+interesa auditar. Los eventos con autor lo siguen guardando siempre.
+
+**Decisiones de operación que contestó Alejo** (delegó el criterio):
+turno = ciclo de caja, no horario de puertas; **cerrar el turno bloquea cobrar
+pero no entregar**, así se sigue despachando lo ya vendido mientras se cierra la
+caja.
+
+**Lo que costó:** cinco comportamientos no documentados de los hooks de
+PocketBase, ninguno de los cuales da un error que apunte al problema. Están
+todos anotados arriba en § Gotchas de los hooks. El peor: un archivo que no se
+llame `*.pb.js` **no se carga y el server no dice nada**.
+
+---
+
 ## 🔑 Keywords
 
 *(convención: cada feature se referencia con una keyword entre corchetes, para
 poder retomarla en otra conversación. Ej: `[CLAIM-TIMEOUT]`, `[ARQUEO]`)*
 
 - `[SCHEMA]` — las 6 colecciones y sus reglas. Bloque 1. ✅
-- `[CLAIM-TIMEOUT]` — devolver a `pendiente` un item abandonado. Pendiente.
-- `[HOOKS]` — mover reglas de negocio del cliente al server (`pb_hooks/`). Pendiente.
+- `[HOOKS]` — reglas de negocio en el server. Bloque 3. ✅
+- `[CLAIM-TIMEOUT]` — devolver a `pendiente` un trago abandonado. Bloque 3. ✅
 - `[ARQUEO]` — reportes de cierre de turno. Pendiente.
+- `[STOCK]` — apagar solo un producto cuando se agota. Hoy es manual con el
+  toggle `activo`. Fase 2.
 
 ---
 
@@ -272,12 +381,16 @@ Tiene que terminar así:
 
 ```
 ────────────────────────────────────────────
-  52 OK · 0 fallas
+  92 OK · 0 fallas
 ────────────────────────────────────────────
 ```
 
-Si dice **0 fallas**, el schema está sano. Si dice cualquier otro número,
+Si dice **0 fallas**, el backend está sano. Si dice cualquier otro número,
 copiá las líneas que digan `FALLA` y pasámelas por el chat.
+
+La última prueba espera hasta 70 segundos, porque comprueba que el reloj interno
+devuelva solo un trago abandonado. Si tenés apuro, `verificar.cmd` se puede
+correr salteándola desde PowerShell con `node pberificar.mjs --rapido`.
 
 <details>
 <summary>Si preferís hacerlo por terminal</summary>
@@ -435,16 +548,12 @@ sale más barato que un arqueo que no cierra.
 
 ### Pendientes
 
-1. `[HOOKS]` — **esperando decisión del Chat.** El diagnóstico con los 9
-   agujeros medidos y las 3 opciones está en
-   [`DECISION-HOOKS.md`](DECISION-HOOKS.md). Recomendación de Code: opción C
-   (híbrido), y antes que la UI. Nada de esto se implementa hasta que vuelva el
-   brief.
-2. `[CLAIM-TIMEOUT]` — cron que devuelve a `pendiente` los items en
-   `preparando` con más de 8 minutos, y escribe evento `timeout`.
-3. UI de caja (`caja.html`) y de barra (`barra.html`).
-4. Service Worker + manifest (PWA).
-5. Plan B: impresora térmica y carga manual.
+1. **UI de caja** (`caja.html`) y **de barra** (`barra.html`). El server ya
+   valida todo, así que las pantallas son "mostrar y mandar". **Va en Sonnet 5.**
+2. Service Worker + manifest (PWA).
+3. Plan B: impresora térmica y carga manual.
+4. `[ARQUEO]` — reportes de cierre de turno.
+5. **Decidir el hardware del server.** Ver el riesgo del reloj más abajo.
 
 ### Reglas de oro al arrancar
 
