@@ -105,7 +105,8 @@ for (const rol of ['cajero', 'barman', 'jefe']) {
   ok('hay un ' + rol, staffTodos.body.items.some((s) => s.rol === rol))
 }
 const prodTodos = await api('GET', '/api/collections/productos/records?perPage=100', { token: admin.token })
-ok('12 productos', prodTodos.body.totalItems === 12, 'hay ' + prodTodos.body.totalItems)
+// [PODA] 13: el seed reemplazo 'Quilmes 1L' por el par de 1/2 L y 1 L
+ok('13 productos', prodTodos.body.totalItems === 13, 'hay ' + prodTodos.body.totalItems)
 const cats = new Set(prodTodos.body.items.map((p) => p.categoria))
 ok('las 4 categorías con al menos un producto', cats.size === 4, [...cats].join(', '))
 
@@ -144,30 +145,45 @@ const gin = prodTodos.body.items.find((p) => p.nombre === 'Gin Tonic')
 
 const ordenRes = await api('POST', '/api/collections/ordenes/records', {
   token: cajero.token,
-  body: { turno_id: turno.id, estado: 'borrador', cajero_id: cajero.record.id },
+  body: { turno_id: turno.id, estado: 'borrador', cajero_id: cajero.record.id, metodo_pago: 'efectivo' },
 })
 ok('el cajero crea una orden en borrador', ordenRes.status === 200, msg(ordenRes))
 const orden = ordenRes.body
 
 const item1 = await api('POST', '/api/collections/orden_items/records', {
   token: cajero.token,
-  body: { orden_id: orden.id, producto_id: fernet.id, cantidad: 2, estado: 'pendiente' },
+  body: { orden_id: orden.id, producto_id: fernet.id, estado: 'pendiente' },
 })
 const item2 = await api('POST', '/api/collections/orden_items/records', {
   token: cajero.token,
-  body: { orden_id: orden.id, producto_id: gin.id, cantidad: 1, estado: 'pendiente' },
+  body: { orden_id: orden.id, producto_id: gin.id, estado: 'pendiente' },
 })
 ok('el cajero carga 2 items', item1.status === 200 && item2.status === 200)
 
+// [PODA] una fila por trago: el campo `cantidad` ya no existe
+const conCantidad = await api('POST', '/api/collections/orden_items/records', {
+  token: cajero.token,
+  body: { orden_id: orden.id, producto_id: gin.id, estado: 'pendiente', cantidad: 5 },
+})
+const itemConCantidad = conCantidad.status === 200
+  ? (await api('GET', '/api/collections/orden_items/records/' + conCantidad.body.id, { token: cajero.token })).body
+  : null
+ok('[PODA] orden_items ya NO tiene campo `cantidad`',
+  itemConCantidad && itemConCantidad.cantidad === undefined,
+  itemConCantidad ? 'devolvió cantidad = ' + itemConCantidad.cantidad : msg(conCantidad))
+if (conCantidad.status === 200) {
+  await api('DELETE', '/api/collections/orden_items/records/' + conCantidad.body.id, { token: cajero.token })
+}
+
 const ordenBarman = await api('POST', '/api/collections/ordenes/records', {
   token: barman.token,
-  body: { turno_id: turno.id, estado: 'borrador', cajero_id: barman.record.id },
+  body: { turno_id: turno.id, estado: 'borrador', cajero_id: barman.record.id, metodo_pago: 'efectivo' },
 })
 ok('el barman NO puede crear órdenes', ordenBarman.status !== 200, msg(ordenBarman))
 
 const itemBarman = await api('POST', '/api/collections/orden_items/records', {
   token: barman.token,
-  body: { orden_id: orden.id, producto_id: gin.id, cantidad: 1, estado: 'pendiente' },
+  body: { orden_id: orden.id, producto_id: gin.id, estado: 'pendiente' },
 })
 ok('el barman NO puede agregar items', itemBarman.status !== 200, msg(itemBarman))
 
@@ -185,7 +201,8 @@ ok('la caja SÍ ve su borrador', vistaCaja.body.totalItems === 1)
 
 // ═══════════════════════════════════════════════════════════════
 titulo('6 · Cobrar — lo hace el servidor, no la pantalla')
-const totalEsperado = fernet.precio * 2 + gin.precio * 1
+// [PODA] cada fila es un trago: el total es la SUMA de los precios
+const totalEsperado = fernet.precio + gin.precio
 
 const cobroPatch = await api('PATCH', '/api/collections/ordenes/records/' + orden.id, {
   token: cajero.token,
@@ -260,8 +277,8 @@ ok('el claim deja barman_id', itemClaim.body.barman_id === barman.record.id)
 ok('el claim deja claim_at (lo usa el timeout)', !!itemClaim.body.claim_at)
 
 const ordenPrep = await api('GET', '/api/collections/ordenes/records/' + orden.id, { token: cajero.token })
-ok('la orden se derivó sola a `en_preparacion`', ordenPrep.body.estado === 'en_preparacion',
-  ordenPrep.body.estado)
+ok('[PODA] con un trago en preparación la orden sigue en `cobrada`',
+  ordenPrep.body.estado === 'cobrada', ordenPrep.body.estado)
 
 const listo = await api('PATCH', '/api/collections/orden_items/records/' + item1.body.id, {
   token: barman.token, body: { estado: 'listo' },
@@ -323,7 +340,7 @@ const turnoViejo = await api('POST', '/api/collections/turnos/records', {
 })
 const ordenEnCerrado = await api('POST', '/api/collections/ordenes/records', {
   token: cajero.token,
-  body: { turno_id: turnoViejo.body.id, estado: 'borrador', cajero_id: cajero.record.id },
+  body: { turno_id: turnoViejo.body.id, estado: 'borrador', cajero_id: cajero.record.id, metodo_pago: 'efectivo' },
 })
 ok('#1 crear orden en turno CERRADO', ordenEnCerrado.status !== 200, msg(ordenEnCerrado))
 
@@ -331,11 +348,19 @@ ok('#1 crear orden en turno CERRADO', ordenEnCerrado.status !== 200, msg(ordenEn
 //    El unico camino es el endpoint, que congela e ignora el total del body.
 const ordenB = (await api('POST', '/api/collections/ordenes/records', {
   token: cajero.token,
-  body: { turno_id: turno.id, estado: 'borrador', cajero_id: cajero.record.id, total: 1 },
+  body: { turno_id: turno.id, estado: 'borrador', cajero_id: cajero.record.id, metodo_pago: 'efectivo', total: 1 },
 })).body
 await api('POST', '/api/collections/orden_items/records', {
   token: cajero.token,
-  body: { orden_id: ordenB.id, producto_id: gin.id, cantidad: 3, estado: 'pendiente' },
+  body: { orden_id: ordenB.id, producto_id: gin.id, estado: 'pendiente' },
+})
+await api('POST', '/api/collections/orden_items/records', {
+  token: cajero.token,
+  body: { orden_id: ordenB.id, producto_id: gin.id, estado: 'pendiente' },
+})
+await api('POST', '/api/collections/orden_items/records', {
+  token: cajero.token,
+  body: { orden_id: ordenB.id, producto_id: gin.id, estado: 'pendiente' },
 })
 const cobroB = await api('POST', '/api/tragos/cobrar', {
   token: cajero.token,
@@ -388,6 +413,14 @@ const mentira = await api('PATCH', '/api/collections/ordenes/records/' + ordenB.
 })
 ok('#8 escribir el estado de la orden a mano', mentira.status !== 200, msg(mentira))
 
+// [PODA] los 3 estados eliminados ya no existen en el select
+for (const muerto of ['en_preparacion', 'lista', 'descartada']) {
+  const r = await api('PATCH', '/api/collections/ordenes/records/' + ordenB.id, {
+    token: cajero.token, body: { estado: muerto },
+  })
+  ok('[PODA] `' + muerto + '` es rechazado como estado de orden', r.status !== 200, msg(r))
+}
+
 // #9 dos turnos abiertos
 const dobleTurno = await api('POST', '/api/collections/turnos/records', {
   token: cajero.token,
@@ -406,11 +439,11 @@ titulo('11 · Las carreras — pruebas 53 a 56 del brief')
 // [53] cobrar dos veces
 const ordenC = (await api('POST', '/api/collections/ordenes/records', {
   token: cajero.token,
-  body: { turno_id: turno.id, estado: 'borrador', cajero_id: cajero.record.id },
+  body: { turno_id: turno.id, estado: 'borrador', cajero_id: cajero.record.id, metodo_pago: 'efectivo' },
 })).body
 await api('POST', '/api/collections/orden_items/records', {
   token: cajero.token,
-  body: { orden_id: ordenC.id, producto_id: fernet.id, cantidad: 1, estado: 'pendiente' },
+  body: { orden_id: ordenC.id, producto_id: fernet.id, estado: 'pendiente' },
 })
 const cobro1 = await api('POST', '/api/tragos/cobrar', {
   token: cajero.token, body: { orden_id: ordenC.id, metodo_pago: 'efectivo' },
@@ -493,11 +526,11 @@ if (RAPIDO) {
   titulo('12 · [55] Timeout del claim — el cron tarda hasta 1 minuto')
   const ordenD = (await api('POST', '/api/collections/ordenes/records', {
     token: cajero.token,
-    body: { turno_id: turno.id, estado: 'borrador', cajero_id: cajero.record.id },
+    body: { turno_id: turno.id, estado: 'borrador', cajero_id: cajero.record.id, metodo_pago: 'efectivo' },
   })).body
   await api('POST', '/api/collections/orden_items/records', {
     token: cajero.token,
-    body: { orden_id: ordenD.id, producto_id: gin.id, cantidad: 1, estado: 'pendiente' },
+    body: { orden_id: ordenD.id, producto_id: gin.id, estado: 'pendiente' },
   })
   await api('POST', '/api/tragos/cobrar', {
     token: cajero.token, body: { orden_id: ordenD.id, metodo_pago: 'efectivo' },
@@ -537,6 +570,84 @@ if (RAPIDO) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+titulo('12b · [PODA] — el modelo simplificado')
+
+const colsAhora = await api('GET', '/api/collections?perPage=100', { token: admin.token })
+const ordenesAhora = colsAhora.body.items.find((c) => c.name === 'ordenes')
+const itemsAhora = colsAhora.body.items.find((c) => c.name === 'orden_items')
+const productosAhora = colsAhora.body.items.find((c) => c.name === 'productos')
+
+const campos = (col) => col.fields.map((f) => f.name)
+
+ok('[PODA] `orden_items` no tiene el campo `cantidad`',
+  !campos(itemsAhora).includes('cantidad'), campos(itemsAhora).join(', '))
+
+const valoresEstado = ordenesAhora.fields.find((f) => f.name === 'estado').values
+ok('[PODA] `ordenes.estado` acepta exactamente 3 valores',
+  valoresEstado.length === 3, valoresEstado.join(', '))
+ok('[PODA] los 3 valores son borrador · cobrada · entregada',
+  ['borrador', 'cobrada', 'entregada'].every((v) => valoresEstado.includes(v)),
+  valoresEstado.join(', '))
+
+const campoMetodo = ordenesAhora.fields.find((f) => f.name === 'metodo_pago')
+ok('[PODA] `metodo_pago` es obligatorio', campoMetodo.required === true,
+  'required = ' + campoMetodo.required)
+
+// una orden sin metodo_pago tiene que ser rechazada
+const sinMetodo = await api('POST', '/api/collections/ordenes/records', {
+  token: cajero.token,
+  body: { turno_id: turno.id, estado: 'borrador', cajero_id: cajero.record.id },
+})
+ok('[PODA] una orden SIN metodo_pago es rechazada', sinMetodo.status !== 200, msg(sinMetodo))
+
+// productos: grupo y etiqueta, ambos opcionales
+ok('[PODA] `productos` tiene el campo `grupo`', campos(productosAhora).includes('grupo'))
+ok('[PODA] `productos` tiene el campo `etiqueta`', campos(productosAhora).includes('etiqueta'))
+ok('[PODA] `grupo` es opcional',
+  productosAhora.fields.find((f) => f.name === 'grupo').required !== true)
+ok('[PODA] `etiqueta` es opcional',
+  productosAhora.fields.find((f) => f.name === 'etiqueta').required !== true)
+
+const prodSinGrupo = await api('POST', '/api/collections/productos/records', {
+  token: jefe.token,
+  body: { nombre: 'Prueba sin grupo', categoria: 'trago', precio: 5000, activo: true, orden: 999 },
+})
+ok('[PODA] un producto SIN grupo sigue siendo válido', prodSinGrupo.status === 200, msg(prodSinGrupo))
+if (prodSinGrupo.status === 200) {
+  await api('DELETE', '/api/collections/productos/records/' + prodSinGrupo.body.id, { token: admin.token })
+}
+
+// el par de vasos del seed
+const paresQuilmes = (await api('GET', '/api/collections/productos/records?filter=' +
+  encodeURIComponent('grupo="quilmes"'), { token: jefe.token })).body
+ok('[PODA] el seed tiene el par de vasos agrupado', paresQuilmes.totalItems === 2,
+  'hay ' + paresQuilmes.totalItems)
+ok('[PODA] las dos mitades tienen etiqueta distinta',
+  new Set((paresQuilmes.items || []).map((p) => p.etiqueta)).size === 2,
+  (paresQuilmes.items || []).map((p) => p.etiqueta).join(' / '))
+ok('[PODA] y precios distintos (son productos separados de verdad)',
+  new Set((paresQuilmes.items || []).map((p) => p.precio)).size === 2,
+  (paresQuilmes.items || []).map((p) => p.precio).join(' / '))
+
+// borrar un borrador: el deleteRule nuevo
+const paraBorrar = await api('POST', '/api/collections/ordenes/records', {
+  token: cajero.token,
+  body: { turno_id: turno.id, estado: 'borrador', cajero_id: cajero.record.id, metodo_pago: 'efectivo' },
+})
+const borrarBorrador = await api('DELETE', '/api/collections/ordenes/records/' + paraBorrar.body.id, {
+  token: cajero.token,
+})
+ok('[PODA] un borrador SE PUEDE borrar (reemplaza a `descartada`)',
+  borrarBorrador.status === 204, msg(borrarBorrador))
+
+// pero una cobrada NO
+const borrarCobrada = await api('DELETE', '/api/collections/ordenes/records/' + orden.id, {
+  token: cajero.token,
+})
+ok('[PODA] una orden COBRADA no se puede borrar (es plata cobrada)',
+  borrarCobrada.status !== 204, msg(borrarCobrada))
+
+// ═══════════════════════════════════════════════════════════════
 titulo('13 · Limpieza')
 await limpiarTodo()
 const quedanOrdenes = await api('GET', '/api/collections/ordenes/records', { token: admin.token })
@@ -547,7 +658,7 @@ ok('base limpia: 0 turnos de prueba', quedanTurnos.body.totalItems === 0,
   'quedan ' + quedanTurnos.body.totalItems)
 
 const prodFinal = await api('GET', '/api/collections/productos/records?perPage=100', { token: admin.token })
-ok('el seed quedó intacto: 12 productos', prodFinal.body.totalItems === 12,
+ok('el seed quedó intacto: 13 productos', prodFinal.body.totalItems === 13,
   'hay ' + prodFinal.body.totalItems)
 
 // ═══════════════════════════════════════════════════════════════

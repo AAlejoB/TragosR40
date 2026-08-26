@@ -28,6 +28,13 @@ El menú.
 | `precio` | number | Precio ACTUAL. No es el que se cobra en órdenes viejas |
 | `activo` | bool | Si se acaba el Fernet, lo apagás y desaparece de la caja |
 | `orden` | number | Orden de aparición en pantalla |
+| `grupo` | text | Opcional. Los que comparten grupo se dibujan como un botón partido |
+| `etiqueta` | text | Opcional. Lo que dice cada mitad: `1/2 L`, `1 L` |
+
+**`grupo` y `etiqueta` son SOLO visuales.** El vaso de ½ L y el de 1 L son
+dos productos distintos en la base, con su propio precio y su propio `activo`.
+Se agrupan nada más que para no llenar la grilla de la caja de duplicados. El
+servidor no sabe nada de grupos: cobra productos, no botones.
 
 ### `turnos`
 Una noche.
@@ -42,6 +49,31 @@ Una noche.
 
 Sin turno abierto no se pueden crear órdenes. El recuento se calcula contra el turno.
 
+#### La `fecha` del turno NO es la fecha del reloj
+
+**Se calcula como `abierto_at` menos 6 horas.**
+
+El boliche abre a la 01:00 del sábado y cierra a las 06:00 del domingo. Sin
+esta corrección, la venta del sábado a la noche figuraría como venta del
+domingo, y el arqueo del sábado saldría vacío.
+
+Restando 6 horas, todo lo que pasa entre la 01:00 y las 06:59 del domingo cae
+en el sábado, que es la noche que realmente fue.
+
+> ⏳ **Todavía no implementado.** Va en el hook de `cobrar`, próximo bloque.
+> Hoy `fecha` se manda desde la pantalla sin corregir.
+
+#### Turno único y auto-apertura
+
+- **Turno único:** no puede haber dos turnos abiertos a la vez (era el agujero
+  #9 del diagnóstico). Ya está implementado y verificado.
+- **Auto-apertura:** si no hay ningún turno abierto, **el primer cobro debería
+  crear el turno solo**. Nadie tiene que acordarse de apretar "abrir turno" a
+  la 01:00 con gente esperando.
+
+> ⏳ **La auto-apertura todavía no está.** Va en el hook de `cobrar`, próximo
+> bloque. Hoy el cajero abre el turno a mano desde `caja.html`.
+
 ### `ordenes`
 La cabecera del pedido.
 
@@ -50,16 +82,21 @@ La cabecera del pedido.
 | `id` | uuid | PK interno |
 | `turno_id` | rel → turnos | |
 | `numero` | number | 1-999, resetea por turno. Es lo que se grita |
-| `estado` | select | `borrador` · `cobrada` · `en_preparacion` · `lista` · `entregada` · `descartada` |
+| `estado` | select | `borrador` · `cobrada` · `entregada` |
 | `total` | number | Suma congelada al cobrar |
-| `metodo_pago` | select | `efectivo` · `tarjeta` · `transferencia` |
+| `metodo_pago` | select | **Obligatorio.** `efectivo` · `tarjeta` · `transferencia` |
 | `cajero_id` | rel → staff | |
 | `created_at` | datetime | |
 | `cobrada_at` | datetime | |
 | `entregada_at` | datetime | |
 
 ### `orden_items`
-Una fila por trago. **Acá vive el estado real.**
+**Una fila por trago.** 3 Fernet son 3 registros, no uno con `cantidad: 3`.
+Acá vive el estado real.
+
+Por qué no hay `cantidad`: con 3 en una sola fila, esa fila no puede tener UN
+estado — el barman termina uno y los otros dos siguen en preparación. Agrupar
+"3× Fernet" en pantalla es cosa de la pantalla, no del modelo.
 
 | Campo | Tipo | Notas |
 |---|---|---|
@@ -67,7 +104,6 @@ Una fila por trago. **Acá vive el estado real.**
 | `orden_id` | rel → ordenes | |
 | `producto_id` | rel → productos | |
 | `nombre_snapshot` | text | Nombre al momento de cobrar |
-| `cantidad` | number | |
 | `precio_unit` | number | **Copiado del producto al cobrar. Nunca se recalcula** |
 | `estado` | select | `pendiente` · `preparando` · `listo` · `entregado` · `anulado` |
 | `barman_id` | rel → staff | Quién lo tomó. null hasta el claim |
@@ -96,11 +132,14 @@ Append-only. El registro contable.
 
 ```
                     ┌─── EL PORTÓN ───┐
-  borrador ────────▶│     cobrada     │────▶ en_preparacion ──▶ lista ──▶ entregada
-     │              └─────────────────┘              ▲            ▲          ▲
-     ▼                                               └────────────┴──────────┘
-  descartada                                   (derivado del estado de los items)
+  borrador ────────▶│     cobrada     │──────────────▶ entregada
+     │              └─────────────────┘         (cuando no queda
+     ▼                                           nada por entregar)
+  se BORRA
 ```
+
+Un borrador que no se cobra **se borra** (el `deleteRule` lo permite sólo
+mientras siga en borrador). Una orden cobrada no se borra nunca: es plata.
 
 ### Item
 
@@ -114,12 +153,15 @@ Append-only. El registro contable.
 
 | Si los items están... | La orden está |
 |---|---|
-| Todos `pendiente` | `cobrada` |
-| Alguno `preparando`, ninguno terminado | `en_preparacion` |
-| Todos `listo` o `entregado` (mín. uno `listo`) | `lista` |
+| Queda alguno sin entregar | `cobrada` |
 | Todos `entregado` o `anulado` | `entregada` |
 
 Los items `anulado` se ignoran al derivar.
+
+**Por qué sólo dos filas:** `en_preparacion` y `lista` eran una copia del
+estado de los items, guardada aparte y esperando desincronizarse. Si querés
+saber si un pedido está a medio hacer, mirá los items — que es donde vive el
+estado real. La orden sólo necesita saber si ya terminó o no.
 
 ---
 
@@ -141,9 +183,15 @@ En esta transición:
 El barman toca el trago y queda marcado con su `barman_id` + `claim_at`, para
 que dos no preparen el mismo.
 
-**Necesita timeout:** si nadie lo marca `listo` en N minutos (arrancar con 8),
-vuelve a `pendiente`, se limpia `barman_id` y se escribe evento `timeout`.
-Sin esto, un barman que se distrae congela el pedido.
+**Timeout:** si nadie lo marca `listo` en 8 minutos, vuelve a `pendiente`, se
+limpia `barman_id` y se escribe evento `timeout`. Sin esto, un barman que se
+distrae congela el pedido. ✅ Implementado (cron cada minuto) y verificado.
+
+> El brief de [PODA] pedía posponerlo, asumiendo una sola pantalla en la barra.
+> **No se pospuso**, porque el supuesto no se sostiene: Alejo confirmó 3-4
+> barmans trabajando sobre la misma cola, que es exactamente el escenario para
+> el que existe el claim. Además ya estaba hecho, probado y pasando. Sacarlo
+> habría sido perder algo que ya sirve para el caso real.
 
 ### 3. `precio_unit` no se recalcula jamás
 Si a las 3am subís el precio del Gin Tonic, las órdenes ya cobradas no pueden
@@ -165,7 +213,7 @@ tragos ya cobrados.
 
 | Métrica | Cómo |
 |---|---|
-| Tragos por producto | `count(orden_items)` por `producto_id`, estado `entregado`, filtrado por turno |
+| Tragos por producto | `count(orden_items)` por `producto_id`, estado `entregado`, filtrado por turno. Como cada fila es un trago, contar es `count()`, nunca `sum(cantidad)` |
 | Tragos por hora | Agrupar `eventos` tipo `entregado` por hora |
 | Productividad por barman | `count` por `barman_id` |
 | Tiempo promedio de preparación | `avg(listo_at - claim_at)` desde `eventos` |

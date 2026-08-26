@@ -47,26 +47,31 @@ function escribirEvento(app, ordenId, itemId, tipo, staffId, payload) {
   app.save(ev)
 }
 
+/**
+ * Deriva el estado de la orden a partir de sus items.
+ *
+ * [PODA] Antes esto tenia 4 salidas (cobrada / en_preparacion / lista /
+ * entregada). Ahora son 2, porque `en_preparacion` y `lista` se sacaron del
+ * schema: eran una copia del estado de los items, guardada aparte, esperando
+ * desincronizarse. Si queres saber si un pedido esta a medio hacer, mira los
+ * items — que es donde vive el estado real (NO ROMPER #4).
+ *
+ * Una orden cobrada solo cambia cuando NO le queda nada por entregar.
+ */
 function derivarEstadoOrden(app, ordenId) {
   if (!ordenId) return
   const orden = app.findRecordById('ordenes', ordenId)
   if (!orden) return
 
+  // Un borrador todavia no paso el porton: no se deriva nada.
+  if (orden.get('estado') === 'borrador') return
+
   const items = app.findRecordsByFilter('orden_items', 'orden_id = {:oid}', '', 0, 0, { oid: ordenId })
   const activos = items.map((it) => it.get('estado')).filter((s) => s !== 'anulado')
 
-  let nuevo
-  if (activos.length === 0) {
-    nuevo = 'entregada'
-  } else if (activos.every((s) => s === 'pendiente')) {
-    nuevo = 'cobrada'
-  } else if (activos.every((s) => s === 'entregado')) {
-    nuevo = 'entregada'
-  } else if (activos.every((s) => s === 'listo' || s === 'entregado')) {
-    nuevo = 'lista'
-  } else {
-    nuevo = 'en_preparacion'
-  }
+  // Sin items activos (todos anulados) tambien cuenta como terminada.
+  const terminada = activos.every((s) => s === 'entregado')
+  const nuevo = terminada ? 'entregada' : 'cobrada'
 
   if (orden.get('estado') === nuevo) return
 

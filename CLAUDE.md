@@ -70,7 +70,7 @@ Si una feature necesita internet para funcionar durante la noche, está mal dise
 tragos/
 ├── .gitignore
 ├── arrancar.cmd            ← Doble clic: prende el servidor
-├── verificar.cmd           ← Doble clic: corre los 92 chequeos
+├── verificar.cmd           ← Doble clic: corre los 111 chequeos
 ├── pb/                     ← PocketBase (ejecutable + pb_data + pb_migrations)
 │   ├── pocketbase(.exe)    ← v0.40.1. NO commitear (33 MB) — ver pb/README.md
 │   ├── pb_data/            ← SQLite. NO commitear
@@ -78,7 +78,7 @@ tragos/
 │   ├── pb_hooks/           ← Reglas de negocio del server
 │   │   ├── main.pb.js      ← Endpoints, guardas, derivación y cron
 │   │   └── utils.js        ← Helpers (NO .pb.js: es módulo, no hook)
-│   ├── verificar.mjs       ← Suite de 92 chequeos (node, sin deps)
+│   ├── verificar.mjs       ← Suite de 111 chequeos (node, sin deps)
 │   └── README.md           ← Cómo instalar y arrancar PocketBase
 ├── web/                    ← Lo sirve PocketBase (--publicDir en arrancar.cmd)
 │   ├── index.html          ← Elegí pantalla: caja o barra
@@ -124,7 +124,12 @@ PocketBase, así que la API queda en el mismo origen.
 3. **Nada llega a la barra sin pasar por `cobrada`.** Un pedido en `borrador`
    es invisible para el barman.
 4. **El estado real vive en el item, no en la orden.** El estado de la orden se
-   deriva de sus items.
+   deriva de sus items — y sólo tiene 3 valores: `borrador`, `cobrada`,
+   `entregada`.
+   **Una fila de `orden_items` = UN trago.** 3 Fernet son 3 registros, no uno
+   con `cantidad: 3`. Agrupar "3× Fernet" es cosa de la pantalla. Si volvés a
+   meter `cantidad`, esa fila deja de poder tener un solo estado y se rompe
+   esta regla.
 5. **`numero` de orden es corto (1-999) y resetea por turno.** El `id` interno
    es UUID pero nunca se le muestra a nadie: no se puede gritar un UUID por
    encima de la música.

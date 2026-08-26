@@ -174,7 +174,9 @@ const abrirTurno = async () => {
 
 const cerrarTurno = async () => {
   await cargarOrdenes()
-  const cobradas = estado.ordenes.filter((o) => o.numero > 0 && o.estado !== 'descartada')
+  // Con numero > 0 alcanza: sólo se asigna al cobrar, y los borradores que no
+  // se cobran ya no quedan como `descartada`, se borran ([PODA]).
+  const cobradas = estado.ordenes.filter((o) => o.numero > 0)
   const porMetodo = {}
   let total = 0
   for (const o of cobradas) {
@@ -238,12 +240,22 @@ const mostrarNumero = (numero, total) => {
   setTimeout(cerrar, 25000)
 }
 
-/** Crea la orden y sus items. Devuelve el id, o null si falló. */
+/**
+ * Crea la orden y sus items. Devuelve el id, o null si falló.
+ *
+ * [PODA] Una fila por trago: 3 Fernet son 3 registros, no uno con
+ * `cantidad: 3`. Es lo que permite que dos de esos tres estén listos y el
+ * tercero todavía en preparación. El cajero no ve la diferencia: sigue
+ * tocando + y viendo "3" en el carrito.
+ */
 const crearOrden = async () => {
   const rOrden = await PB.pedir('POST', '/api/collections/ordenes/records', {
     turno_id: estado.turno.id,
     estado: 'borrador',
     cajero_id: PB.staff.id,
+    // metodo_pago es obligatorio desde [PODA]. El definitivo lo escribe el
+    // endpoint de cobrar; este es sólo para que el borrador sea válido.
+    metodo_pago: estado.metodoPago,
   })
   if (!rOrden.ok) {
     UI.avisar(rOrden.mensaje, 'mala')
@@ -252,15 +264,16 @@ const crearOrden = async () => {
   const ordenId = rOrden.datos.id
 
   for (const l of estado.carrito) {
-    const rItem = await PB.pedir('POST', '/api/collections/orden_items/records', {
-      orden_id: ordenId,
-      producto_id: l.producto.id,
-      cantidad: l.cantidad,
-      estado: 'pendiente',
-    })
-    if (!rItem.ok) {
-      UI.avisar('No se pudo cargar ' + l.producto.nombre + ': ' + rItem.mensaje, 'mala')
-      return null
+    for (let i = 0; i < l.cantidad; i++) {
+      const rItem = await PB.pedir('POST', '/api/collections/orden_items/records', {
+        orden_id: ordenId,
+        producto_id: l.producto.id,
+        estado: 'pendiente',
+      })
+      if (!rItem.ok) {
+        UI.avisar('No se pudo cargar ' + l.producto.nombre + ': ' + rItem.mensaje, 'mala')
+        return null
+      }
     }
   }
   return ordenId
@@ -339,7 +352,10 @@ const resolverCobroColgado = async () => {
       UI.avisar(c.mensaje, 'mala')
     }
   } else {
-    await PB.pedir('PATCH', '/api/collections/ordenes/records/' + ordenId, { estado: 'descartada' })
+    // [PODA] Ya no existe el estado `descartada`: un borrador que no se cobra
+    // se borra. El deleteRule sólo lo permite mientras siga en borrador, así
+    // que esto no puede tocar plata ya cobrada.
+    await PB.pedir('DELETE', '/api/collections/ordenes/records/' + ordenId)
     localStorage.removeItem(CLAVE_COBRO_PENDIENTE)
   }
 }

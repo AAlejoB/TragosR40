@@ -56,6 +56,8 @@ routerAdd('POST', '/api/tragos/cobrar', (e) => {
       if (items.length === 0) throw u.fallo(400, 'La orden no tiene items')
 
       // Congelar precio y nombre. Se leen del producto, NUNCA del body.
+      // Cada fila es UN trago (ver [PODA]: se saco `cantidad`), asi que el
+      // total es la suma de los precios, sin multiplicar por nada.
       let total = 0
       for (const item of items) {
         const prod = txApp.findRecordById('productos', item.get('producto_id'))
@@ -64,7 +66,7 @@ routerAdd('POST', '/api/tragos/cobrar', (e) => {
         item.set('precio_unit', precio)
         item.set('nombre_snapshot', prod.get('nombre'))
         txApp.save(item)
-        total += precio * item.get('cantidad')
+        total += precio
       }
 
       // Numero corto: adentro de la transaccion, asi dos cajas no sacan el mismo.
@@ -264,10 +266,10 @@ onRecordUpdateRequest((e) => {
     if (estadoNuevo === 'cobrada') {
       throw new BadRequestError('Para cobrar usa POST /api/tragos/cobrar')
     }
-    const descartar = estadoPrevio === 'borrador' && estadoNuevo === 'descartada'
-    if (!descartar) {
-      throw new BadRequestError('El estado de la orden se deriva de sus items, no se escribe')
-    }
+    // [PODA] `descartada` ya no existe: un borrador que no se cobra se BORRA
+    // (deleteRule lo permite solo para borradores). Cualquier otro cambio de
+    // estado lo hace el server derivando de los items.
+    throw new BadRequestError('El estado de la orden se deriva de sus items, no se escribe')
   }
 
   if (estadoPrevio !== 'borrador') {

@@ -80,7 +80,12 @@ const calcularVentaPorHora = () => {
   return porHora
 }
 
-/** Ranking de tragos por cantidad vendida. Ignora anulados. */
+/**
+ * Ranking de tragos por cantidad vendida. Ignora anulados.
+ *
+ * [PODA] Cada fila es un trago (se sacó `cantidad`), así que contar es sumar
+ * de a uno: `sum(cantidad)` pasó a ser `count()`.
+ */
 const calcularRanking = () => {
   const porNombre = {}
   for (const it of estado.items) {
@@ -88,8 +93,8 @@ const calcularRanking = () => {
     if (!it.nombre_snapshot) continue // todavía no se cobró: no cuenta como venta
     const key = it.nombre_snapshot
     if (!porNombre[key]) porNombre[key] = { nombre: key, cantidad: 0, monto: 0 }
-    porNombre[key].cantidad += it.cantidad
-    porNombre[key].monto += it.cantidad * (it.precio_unit || 0)
+    porNombre[key].cantidad += 1
+    porNombre[key].monto += it.precio_unit || 0
   }
   return Object.values(porNombre).sort((a, b) => b.cantidad - a.cantidad)
 }

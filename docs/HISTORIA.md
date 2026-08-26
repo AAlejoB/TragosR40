@@ -22,6 +22,7 @@
 | 25 ago 2026 | **Bloque 4** — `caja.html` y `barra.html` andando, con realtime. Probadas de punta a punta en el navegador: cobro, número gritable, tablero de la barra, anulación y caída del servidor. Sin PWA todavía. |
 | 25 ago 2026 | **Bloque 5** — red de seguridad contra el realtime zombi, latencia medida (**27 ms**), y `gestion.html`: el jefe edita su menú y sus precios sin tocar el panel técnico. |
 | 25 ago 2026 | **Bloque 6** — `panel.html`: reportes para el dueño (venta por hora, ranking de tragos, aviso de silencio). Cerró la duda de "varios locales": lo que pedía Alejo no era eso. Ver `DECISION-MULTILOCAL.md`. |
+| 26 ago 2026 | **Bloque 7 — [PODA]** — brief del Chat. Se saca `cantidad` (una fila por trago), la orden pasa de 6 estados a 3, `metodo_pago` obligatorio, y `grupo`/`etiqueta` para los vasos de ½ L y 1 L. La suite pasó de 92 a **111 chequeos, 0 fallas**. |
 
 ---
 
@@ -543,6 +544,77 @@ reportes en `pb_hooks/` (como `cobrar`), no una regla de colección.
 
 ---
 
+### Bloque 7 — [PODA]: simplificar el modelo (26 ago 2026)
+
+>CLCHAT<
+
+**Brief del Chat.** Sacar del modelo lo que estaba duplicado o mal ubicado,
+antes de que se acumulara más código encima.
+
+**Los cambios que entraron:**
+
+| # | Qué | Por qué |
+|---|---|---|
+| 1 | `orden_items.cantidad` se va | Con 3 en una fila, esa fila no puede tener UN estado. Contradecía NO ROMPER #4 |
+| 2 | `ordenes.estado`: 6 → 3 valores | `en_preparacion` y `lista` eran copia del estado de los items. `descartada` se reemplaza por borrar |
+| 3 | `metodo_pago` obligatorio | Sin método no hay arqueo de efectivo |
+| 4 | `grupo` + `etiqueta` en productos | Vaso de ½ L y de 1 L como un botón partido. **Sólo visual** |
+| 5 | Seed con el par de vasos | Ejemplo vivo de cómo se usa |
+| 6 | Fecha del turno = `abierto_at` − 6 h | Documentado, NO implementado (va en `cobrar`) |
+| 7 | Turno único + auto-apertura | Único ✅ ya estaba. Auto-apertura documentada, NO implementada |
+| 8 | `[CLAIM-TIMEOUT]` | **NO se pospuso.** Ver abajo |
+
+**Lo que demuestra por qué valía la pena el punto 1:** se probó en el navegador
+cobrando 3 Fernet + 1 Gin. Quedaron 4 filas separadas. Después, desde la barra,
+se tomaron los 3 Fernet juntos y se marcó **uno solo** como listo: quedó 1
+listo y 2 todavía preparándose. Con el modelo viejo eso era imposible de
+representar.
+
+---
+
+### El brief venía desfasado del repo, y hubo que frenarlo
+
+>CLCODE<
+
+El brief decía *"se simplifica el modelo **antes** de escribir los hooks"* y se
+titulaba "Bloque 3". Pero los hooks eran el Bloque 3 real, cerrado hacía dos
+bloques, con 92 chequeos en verde. El Chat estaba mirando una foto vieja del
+proyecto (probablemente de antes de que Alejo subiera el commit del Bloque 3).
+
+La señal más clara: el punto 8 pedía posponer `[CLAIM-TIMEOUT]` y "no
+implementar el cron" — pero el cron ya estaba corriendo, con su propia prueba
+pasando ([55] en `verificar.mjs`).
+
+**Por qué eso importaba y no era un detalle:** el brief pedía *sólo migración,
+sin tocar `pb_hooks/` ni `web/`*, y a la vez exigía cerrar en 0 fallas. Con el
+repo real, las dos instrucciones se contradicen:
+
+- `total += precio * item.get('cantidad')` — sin el campo, **todo pedido
+  cobrado habría quedado en $0**. Justo NO ROMPER #1.
+- `derivarEstadoOrden` seguía escribiendo `en_preparacion` y `lista`, valores
+  que ya no existirían en el select → PocketBase rechaza el save → se rompe
+  todo el flujo de la barra.
+- 25 referencias a `cantidad` en las 3 pantallas.
+
+Siguiendo `CLAUDE.md` § *"si aparece un rediseño grande en medio de una tarea,
+se frena y vuelve al Chat"*, se frenó y se le presentó a Alejo el choque con
+las tres opciones. Eligió hacer la migración **más** los parches mínimos.
+
+**Y un dato del brief que no era cierto:** decía *"un borrador se borra, el
+`deleteRule` ya lo permite"*. No lo permitía: `ordenes.deleteRule` era `null`,
+o sea nadie podía borrar una orden. Se abrió, pero **sólo para borradores** y
+sólo cajero o jefe — una orden cobrada sigue sin poder borrarse jamás.
+
+**`[CLAIM-TIMEOUT]`: no se pospuso, a diferencia de lo que pedía el punto 8.**
+El brief justificaba posponerlo con *"una sola pantalla en barra, no hay claim
+entre dispositivos"*. Ese supuesto no se sostiene: el mismo día, Alejo confirmó
+**3-4 barmans sobre una sola cola**, que es exactamente el escenario para el
+que existe el claim. Sacar el cron habría sido perder algo ya hecho, probado y
+útil para el caso real. Los campos `barman_id` y `claim_at` se quedan, como
+pedía el brief, y el cron también.
+
+---
+
 ## 🔑 Keywords
 
 >CLCODE<
@@ -832,12 +904,18 @@ sale más barato que un arqueo que no cierra.
 
 >CLCODE<
 
-1. **UI de caja** (`caja.html`) y **de barra** (`barra.html`). El server ya
-   valida todo, así que las pantallas son "mostrar y mandar". **Va en Sonnet 5.**
-2. Service Worker + manifest (PWA).
-3. Plan B: impresora térmica y carga manual.
-4. `[ARQUEO]` — reportes de cierre de turno.
-5. **Decidir el hardware del server.** Ver el riesgo del reloj más abajo.
+1. **`[TURNO-AUTO]`** — fecha del turno con −6 h y auto-apertura en el primer
+   cobro. Ya documentado en `MODELO-DATOS.md`, falta el hook de `cobrar`. Es lo
+   que el brief de [PODA] dejaba para el bloque siguiente.
+2. **`[BOTON-PARTIDO]`** — dibujar `grupo`/`etiqueta` en `caja.html`. El schema
+   quedó listo en [PODA]; falta sólo la pantalla.
+3. **Service Worker + manifest (PWA).** Lo único que falta para que las tablets
+   aguanten un corte del server sin quedar en blanco. **Sonnet 5.**
+4. **Probar en las tablets reales, en el local, con la WiFi de verdad.** Todo
+   está probado en una notebook contra `localhost`.
+5. Plan B: impresora térmica y carga manual en papel.
+6. **Decidir el hardware del server.** Ver el riesgo del reloj en Decisiones.
+7. **La marca del local** — el nombre en las pantallas (hoy `[NOMBRE DEL LOCAL]`).
 
 ### Reglas de oro al arrancar
 

@@ -6,7 +6,11 @@
  * Si cambia una transición allá, hay que cambiarla acá también.
  */
 
-const ESTADOS_ORDEN = ['borrador', 'cobrada', 'en_preparacion', 'lista', 'entregada', 'descartada']
+// [PODA] La orden tiene 3 estados, no 6. `en_preparacion` y `lista` se
+// sacaron porque eran una copia del estado de los items; si querés saber si
+// un pedido está a medio hacer, mirá los items. `descartada` tampoco existe:
+// un borrador que no se cobra se borra.
+const ESTADOS_ORDEN = ['borrador', 'cobrada', 'entregada']
 const ESTADOS_ITEM = ['pendiente', 'preparando', 'listo', 'entregado', 'anulado']
 
 const TRANSICIONES_ITEM = {
@@ -41,10 +45,7 @@ const METODOS_PAGO = [
 const ETIQUETAS_ORDEN = {
   borrador: 'Borrador',
   cobrada: 'Cobrada',
-  en_preparacion: 'En preparación',
-  lista: 'Lista',
   entregada: 'Entregada',
-  descartada: 'Descartada',
 }
 
 const ETIQUETAS_ITEM = {
@@ -64,11 +65,32 @@ const puedePasar = (desde, hasta) => (TRANSICIONES_ITEM[desde] || []).includes(h
  */
 const derivarEstadoOrden = (items) => {
   const activos = items.map((i) => i.estado).filter((s) => s !== 'anulado')
-  if (activos.length === 0) return 'entregada'
-  if (activos.every((s) => s === 'pendiente')) return 'cobrada'
-  if (activos.every((s) => s === 'entregado')) return 'entregada'
-  if (activos.every((s) => s === 'listo' || s === 'entregado')) return 'lista'
-  return 'en_preparacion'
+  return activos.every((s) => s === 'entregado') ? 'entregada' : 'cobrada'
+}
+
+/**
+ * Agrupa items repetidos para mostrarlos como "3× Fernet".
+ *
+ * [PODA] En la base cada trago es una fila propia (se sacó `cantidad`), pero
+ * en pantalla no tiene sentido listar el mismo trago tres veces seguidas. El
+ * agrupado es SOLO visual: cada elemento del grupo sigue siendo un item con
+ * su propio estado, y las acciones (tomar, listo, anular) van item por item.
+ *
+ * Devuelve [{ nombre, items: [...] }], respetando el orden de aparición.
+ */
+const agruparIguales = (items) => {
+  const grupos = []
+  const porNombre = new Map()
+  for (const it of items) {
+    const clave = it.nombre_snapshot || it.producto_id
+    if (!porNombre.has(clave)) {
+      const g = { nombre: it.nombre_snapshot || '(trago)', items: [] }
+      porNombre.set(clave, g)
+      grupos.push(g)
+    }
+    porNombre.get(clave).items.push(it)
+  }
+  return grupos
 }
 
 /** Plata en pesos, sin decimales: nadie cobra centavos en un boliche. */

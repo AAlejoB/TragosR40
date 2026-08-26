@@ -105,10 +105,10 @@ const pintarCola = () => {
           <span class="num">${num}</span>
           <span class="tiempo ${min >= 5 ? 'tarde' : ''}">${espera}</span>
         </div>
-        ${g.items.map((it) => `
-          <button class="trago" data-claim="${it.id}">
-            <span class="cantidad">${it.cantidad}×</span>
-            <span class="nombre">${UI.esc(nombreDe(it))}</span>
+        ${agruparIguales(g.items).map((gi) => `
+          <button class="trago" data-claim="${gi.items.map((x) => x.id).join(',')}">
+            <span class="cantidad">${gi.items.length}×</span>
+            <span class="nombre">${UI.esc(gi.nombre)}</span>
             <span class="btn btn-chico btn-accion">Tomar</span>
           </button>`).join('')}
         ${varios ? `
@@ -146,7 +146,6 @@ const pintarPreparando = () => {
           const cerca = min >= TIMEOUT_CLAIM_MIN - 2
           return `
             <div class="trago">
-              <span class="cantidad">${it.cantidad}×</span>
               <span class="nombre">${UI.esc(nombreDe(it))}</span>
               <span class="tiempo ${cerca ? 'tarde' : ''}">${desdeHace(it.claim_at)}</span>
             </div>
@@ -193,7 +192,6 @@ const pintarListos = () => {
         </div>
         ${g.items.map((it) => `
           <div class="trago">
-            <span class="cantidad">${it.cantidad}×</span>
             <span class="nombre">${UI.esc(nombreDe(it))}</span>
           </div>
           <div class="acciones-trago">
@@ -240,11 +238,34 @@ const pintar = () => {
 
 // ── Acciones ─────────────────────────────────────────────────
 
-const tomar = async (itemId) => {
-  const r = await PB.pedir('POST', '/api/tragos/claim', { item_id: itemId })
-  if (!r.ok) {
+/**
+ * Toma uno o varios tragos iguales del mismo pedido.
+ *
+ * [PODA] Tras sacar `cantidad`, "3× Fernet" son 3 registros. El botón toma
+ * los tres de una: un barman que hace 3 Fernet los hace juntos. Que sean
+ * registros separados sigue importando — se pueden marcar listos o anular de
+ * a uno si hace falta.
+ */
+const tomar = async (ids) => {
+  const lista = String(ids).split(',').filter(Boolean)
+  let tomados = 0
+  let ultimoMensaje = ''
+  let ultimoStatus = 0
+
+  for (const id of lista) {
+    const r = await PB.pedir('POST', '/api/tragos/claim', { item_id: id })
+    if (r.ok) tomados++
+    else {
+      ultimoMensaje = r.mensaje
+      ultimoStatus = r.status
+    }
+  }
+
+  if (tomados === 0 && ultimoMensaje) {
     // 409 = lo agarró otro primero. No es un error del barman.
-    UI.avisar(r.mensaje, r.status === 409 ? '' : 'mala')
+    UI.avisar(ultimoMensaje, ultimoStatus === 409 ? '' : 'mala')
+  } else if (tomados < lista.length) {
+    UI.avisar(`Tomaste ${tomados} de ${lista.length}: otro barman se adelantó`, '')
   }
   await cargar()
 }
