@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#0d0f12">
+  <title>Panel — Tragos</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <div class="app">
+    <header class="barra-sup">
+      <h1>PANEL</h1>
+      <span class="quien" id="quien"></span>
+      <span class="espaciador"></span>
+      <div class="conexion" id="conexion">
+        <span class="punto"></span><span data-txt>Conectado</span>
+      </div>
+      <button class="btn btn-chico btn-fantasma" id="btn-salir">Salir</button>
+    </header>
+
+    <div class="alerta-caido" id="alerta-caido" style="display:none">
+      SIN CONEXIÓN CON EL SERVIDOR — estos números pueden estar viejos
+    </div>
+
+    <div class="selector-turno">
+      <select id="sel-turno"></select>
+    </div>
+
+    <div class="aviso-silencio" id="aviso-silencio" style="display:none"></div>
+
+    <div class="scroll">
+      <div class="grilla-metricas" id="metricas"></div>
+
+      <div class="seccion-panel">
+        <h2>Venta por hora</h2>
+        <div class="horas" id="horas"></div>
+      </div>
+
+      <div class="seccion-panel">
+        <h2>Lo que más salió</h2>
+        <div id="ranking"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/pb.js"></script>
+  <script src="js/estados.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/panel.js"></script>
+</body>
+</html>

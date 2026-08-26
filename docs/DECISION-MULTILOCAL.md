@@ -163,3 +163,30 @@ edita su menú y sus precios solo). Lo segundo sería la marca —el nombre del
 local en las pantallas—, que es media hora de trabajo y se nota en cada
 pantalla. Las barras y los locales son features para cuando el sistema ya
 sobrevivió una noche real.
+
+---
+
+## Resuelto — 25 ago 2026
+
+Alejo contestó directo, sin pasar por el Chat (es el dueño del proyecto, tiene
+autoridad para decidir esto él mismo):
+
+1. **Varias barras: NO.** Hay una sola barra física con 3-4 barmans
+   trabajando sobre la misma cola. Eso ya es el diseño actual — el `claim`
+   ya resuelve que dos barmans no se pisen tomando el mismo trago. **No hay
+   nada que cambiar.**
+
+2. **Varios locales (B1/B2): resultó ser una tercera cosa.** Lo que Alejo
+   describió no era ver varios boliches — era un pedido de **reportes para
+   UN solo local**: a qué hora se vende más, qué trago sale más, si dejó de
+   venderse algo. Eso no tiene nada que ver con esta decisión; es una
+   feature nueva (`[REPORTES]`), implementada en el Bloque 6. Ver
+   `docs/HISTORIA.md` § Bloque 6.
+
+   Sí quedó confirmado el interés en **B1** (instalar el sistema en otro
+   boliche) como posibilidad de negocio a futuro, sin apuro. Ver la
+   explicación de arriba: ya funciona hoy, sólo falta la marca si se
+   quisiera vender formalmente.
+
+Este archivo queda como referencia histórica de por qué NO se construyeron
+varias barras ni un panel multi-local en la nube.

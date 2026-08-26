@@ -21,6 +21,7 @@
 | 25 ago 2026 | **Bloque 3** — `[HOOKS]` implementado según [`BRIEF-HOOKS.md`](BRIEF-HOOKS.md). Los 9 agujeros cerrados, `[CLAIM-TIMEOUT]` andando. La suite pasó de 52 a **92 chequeos, 0 fallas**. |
 | 25 ago 2026 | **Bloque 4** — `caja.html` y `barra.html` andando, con realtime. Probadas de punta a punta en el navegador: cobro, número gritable, tablero de la barra, anulación y caída del servidor. Sin PWA todavía. |
 | 25 ago 2026 | **Bloque 5** — red de seguridad contra el realtime zombi, latencia medida (**27 ms**), y `gestion.html`: el jefe edita su menú y sus precios sin tocar el panel técnico. |
+| 25 ago 2026 | **Bloque 6** — `panel.html`: reportes para el dueño (venta por hora, ranking de tragos, aviso de silencio). Cerró la duda de "varios locales": lo que pedía Alejo no era eso. Ver `DECISION-MULTILOCAL.md`. |
 
 ---
 
@@ -492,6 +493,53 @@ borra.
 `precio_unit` se congela al cobrar. Se verificó explícitamente — se vendieron 2
 Fernet a $8.000, el jefe subió el Fernet a $15.000, y la venta vieja siguió
 valiendo $16.000. Un cajero, además, no puede cambiar precios.
+
+---
+
+### Bloque 6 — El panel del dueño (25 ago 2026)
+
+>CLCODE<
+
+**De dónde salió:** Alejo le llevó a Claude Chat la pregunta de "varios
+locales" de `DECISION-MULTILOCAL.md`, y al contestarla quedó claro que lo que
+quería en realidad no era eso — era un panel de reportes para un solo local.
+Ver el cierre de esa decisión en el propio archivo.
+
+**Las tres preguntas que pidió Alejo, contestadas con datos que YA existían:**
+
+- *¿A qué hora se vende más?* — gráfico de barras por hora, sumando
+  `ordenes.total` agrupado por la hora de `cobrada_at`.
+- *¿Qué trago sale más esa noche?* — ranking por `orden_items.nombre_snapshot`,
+  sumando `cantidad`.
+- *¿Hace cuánto que no se vende nada?* — minutos desde la venta más reciente
+  del turno abierto. Pasados 20 minutos, aparece un aviso.
+
+**Sin migración.** Todo esto ya estaba guardado desde el Bloque 1: cada venta
+graba su hora, y cada item guarda el nombre del trago al momento de cobrar.
+El panel sólo lee y agrupa, no agrega ningún dato nuevo.
+
+**Por qué el ranking y el total de $ dan resultados distintos con un mismo
+trago anulado:** se probó a propósito. Se vendieron 6 Fernet, 3 Gin Tonic y 1
+Vodka con Speed, y el Vodka se anuló después. El total en pesos SIGUE contando
+esa venta ($8.500): la caja ya cobró esa plata, y `total` de la orden es
+inmutable una vez cobrada (NO ROMPER #1). Pero el **ranking de tragos** excluye
+los items anulados a propósito: no tiene sentido para el dueño ver como "el
+que más salió" un trago que en realidad nunca llegó a la mesa.
+
+**Se prueba en la misma WiFi, no en la nube.** El panel es una pantalla más
+del local (como caja o barra), no algo que se mira desde afuera. Es la
+diferencia entre esto y B2 en `DECISION-MULTILOCAL.md`: ver reportes desde
+adentro no necesita internet; verlos desde la casa sí, y eso es un problema
+distinto que no se resolvió acá.
+
+**Límite conocido, no un agujero nuevo:** un barman ya podía leer
+`ordenes`/`orden_items` completos desde antes (los necesita para ver su
+propia cola en `barra.html`), así que técnicamente ya tenía acceso a los
+mismos números que ve el panel. El login de `panel.html` que exige rol
+`jefe` es una comodidad de pantalla, no un candado nuevo sobre esos datos —
+PocketBase no filtra campo por campo, sólo registro completo. Si en algún
+momento hace falta ocultarle la plata al barman, hay que armar un endpoint de
+reportes en `pb_hooks/` (como `cobrar`), no una regla de colección.
 
 ---
 

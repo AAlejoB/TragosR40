@@ -15,7 +15,8 @@
 | Cómo hablan las pantallas con el server | [`web/js/pb.js`](web/js/pb.js) — cliente propio, sin CDN |
 | Cuánto tarda un pedido en llegar a la barra | [`docs/HISTORIA.md`](docs/HISTORIA.md) § Qué tan rápido — **27 ms medidos** |
 | Por qué el servidor valida lo que valida | [`docs/DECISION-HOOKS.md`](docs/DECISION-HOOKS.md) → [`docs/BRIEF-HOOKS.md`](docs/BRIEF-HOOKS.md) ✅ implementado |
-| Varias barras o varios locales | [`docs/DECISION-MULTILOCAL.md`](docs/DECISION-MULTILOCAL.md) ⏸ esperando al Chat |
+| Varias barras o varios locales | [`docs/DECISION-MULTILOCAL.md`](docs/DECISION-MULTILOCAL.md) ✅ resuelto — no hacía falta ninguna de las dos |
+| Reportes del dueño (qué se vende, cuándo) | [`docs/HISTORIA.md`](docs/HISTORIA.md) § Bloque 6 |
 
 ---
 
@@ -84,6 +85,7 @@ tragos/
 │   ├── caja.html           ← Pantalla del cajero
 │   ├── barra.html          ← Pantalla del barman
 │   ├── gestion.html        ← Menú y precios (sólo el jefe)
+│   ├── panel.html          ← Reportes de la noche (sólo el jefe)
 │   ├── cliente.html        ← Auto-pedido (fase 2, todavía no existe)
 │   ├── sw.js               ← Service Worker (todavía no existe)
 │   ├── manifest.json       ← (todavía no existe)
@@ -93,7 +95,8 @@ tragos/
 │   │   ├── ui.js           ← Login, avisos, modales, indicador de conexión
 │   │   ├── caja.js
 │   │   ├── barra.js
-│   │   └── gestion.js
+│   │   ├── gestion.js
+│   │   └── panel.js
 │   └── css/
 │       └── styles.css
 └── docs/
@@ -104,8 +107,8 @@ tragos/
     └── DECISION-MULTILOCAL.md ← Varias barras / varios locales. Abierto.
 ```
 
-Las pantallas se abren en `http://<ip-del-server>:8090/caja.html`, `/barra.html`
-y `/gestion.html`.
+Las pantallas se abren en `http://<ip-del-server>:8090/caja.html`, `/barra.html`,
+`/gestion.html` y `/panel.html`.
 No hace falta configurar ninguna IP en el código: se sirven desde el mismo
 PocketBase, así que la API queda en el mismo origen.
 
