@@ -18,6 +18,54 @@
  */
 
 // ─────────────────────────────────────────────────────────────
+// POST /api/tragos/turno   — el turno se abre solo
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * [TURNO-AUTO] Devuelve el turno abierto. Si no hay ninguno, lo crea.
+ *
+ * Por que existe: nadie tiene que acordarse de apretar "abrir turno" a la
+ * 01:00 con gente esperando. La caja llama a esto y sigue vendiendo.
+ *
+ * Es idempotente: llamarlo diez veces devuelve el mismo turno. Y la busqueda
+ * y la creacion van en la MISMA transaccion, asi dos cajas que arrancan al
+ * mismo tiempo no abren dos turnos (era el agujero #9).
+ */
+routerAdd('POST', '/api/tragos/turno', (e) => {
+  const u = require(`${__hooks}/utils.js`)
+
+  try {
+    u.exigirRol(e, ['cajero', 'jefe'])
+    const staffId = e.auth.id
+    let salida = null
+
+    $app.runInTransaction((txApp) => {
+      const abiertos = txApp.findRecordsByFilter('turnos', 'cerrado_at = null', '-abierto_at', 1, 0, {})
+
+      if (abiertos.length > 0) {
+        const t = abiertos[0]
+        salida = { id: t.id, fecha: String(t.get('fecha')), creado: false }
+        return
+      }
+
+      const ahora = new DateTime()
+      const t = new Record(txApp.findCollectionByNameOrId('turnos'))
+      t.set('abierto_at', ahora)
+      t.set('fecha', u.fechaDeTurno(ahora))
+      t.set('abierto_por', staffId)
+      txApp.save(t)
+
+      salida = { id: t.id, fecha: String(t.get('fecha')), creado: true }
+    })
+
+    return e.json(200, salida)
+  } catch (err) {
+    const status = err.statusTragos || 400
+    return e.json(status, { code: status, message: err.message || 'Error' })
+  }
+}, $apis.requireAuth('staff'))
+
+// ─────────────────────────────────────────────────────────────
 // POST /api/tragos/cobrar   — EL PORTON
 // ─────────────────────────────────────────────────────────────
 
@@ -293,6 +341,16 @@ onRecordCreateRequest((e) => {
       throw new BadRequestError('Ya hay un turno abierto. Cerralo antes de abrir otro.')
     }
   }
+
+  // [TURNO-AUTO] La fecha la calcula el server, nunca la pantalla. Va aca
+  // ademas de en el endpoint, para que valga por cualquier via de entrada:
+  // si un dia alguien crea un turno desde el admin, tambien sale bien.
+  const abierto = e.record.get('abierto_at')
+  if (!u.sinFecha(abierto)) {
+    const fecha = u.fechaDeTurno(abierto)
+    if (fecha) e.record.set('fecha', fecha)
+  }
+
   e.next()
 }, 'turnos')
 

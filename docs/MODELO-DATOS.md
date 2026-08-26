@@ -60,19 +60,31 @@ domingo, y el arqueo del sábado saldría vacío.
 Restando 6 horas, todo lo que pasa entre la 01:00 y las 06:59 del domingo cae
 en el sábado, que es la noche que realmente fue.
 
-> ⏳ **Todavía no implementado.** Va en el hook de `cobrar`, próximo bloque.
-> Hoy `fecha` se manda desde la pantalla sin corregir.
+**Lo calcula el servidor, nunca la pantalla.** Está en dos lugares para que
+valga por cualquier vía de entrada: el endpoint `POST /api/tragos/turno` y una
+guarda en el create de `turnos` que pisa la `fecha` que venga de afuera.
+
+**Ojo con la zona horaria:** el server guarda en UTC y Comodoro está en UTC−3.
+Si el corte se hiciera sobre UTC, a las 05:00 de la madrugada daría el día
+equivocado — que es justo el caso que esto viene a arreglar. Se restan las 9
+horas de una vez (3 de zona + 6 de corte). Argentina no cambia la hora desde
+2009, así que el offset fijo es seguro. ✅ Implementado y verificado con los 5
+horarios reales del boliche.
 
 #### Turno único y auto-apertura
 
 - **Turno único:** no puede haber dos turnos abiertos a la vez (era el agujero
   #9 del diagnóstico). Ya está implementado y verificado.
-- **Auto-apertura:** si no hay ningún turno abierto, **el primer cobro debería
-  crear el turno solo**. Nadie tiene que acordarse de apretar "abrir turno" a
-  la 01:00 con gente esperando.
+- **Auto-apertura:** ✅ si no hay ningún turno abierto, el primer cobro lo crea.
+  Nadie tiene que acordarse de apretar "abrir turno" a la 01:00 con gente
+  esperando. Lo hace `POST /api/tragos/turno`, que es *conseguir-o-crear*:
+  llamarlo diez veces devuelve el mismo turno.
 
-> ⏳ **La auto-apertura todavía no está.** Va en el hook de `cobrar`, próximo
-> bloque. Hoy el cajero abre el turno a mano desde `caja.html`.
+**Por qué es un endpoint y no parte de `cobrar`:** una orden necesita
+`turno_id` para existir, así que el turno tiene que estar **antes** de crear la
+orden. La caja llama a este endpoint y sigue. La búsqueda y la creación van en
+la misma transacción, así dos cajas que arrancan al mismo tiempo no abren dos
+turnos.
 
 ### `ordenes`
 La cabecera del pedido.

@@ -648,6 +648,87 @@ ok('[PODA] una orden COBRADA no se puede borrar (es plata cobrada)',
   borrarCobrada.status !== 204, msg(borrarCobrada))
 
 // ═══════════════════════════════════════════════════════════════
+titulo('12c · [TURNO-AUTO] — el turno se abre solo, con la fecha de la noche')
+
+// La noche del boliche: abre 01:00 sábado y cierra 06:00 domingo. Todo lo de
+// antes de las 6am cuenta como el día anterior.
+// Se manda la hora LOCAL de Comodoro (UTC-3) y se espera el día correcto.
+const horaLocal = (s) => new Date(s + '-03:00').toISOString()
+const soloDia = (f) => String(f || '').slice(0, 10)
+
+const casosFecha = [
+  ['sábado 22:00 → sábado', '2026-08-29T22:00:00', '2026-08-29'],
+  ['domingo 01:00 (el horario real) → sábado', '2026-08-30T01:00:00', '2026-08-29'],
+  ['domingo 03:30 (pico de venta) → sábado', '2026-08-30T03:30:00', '2026-08-29'],
+  ['domingo 05:59 (último trago) → sábado', '2026-08-30T05:59:00', '2026-08-29'],
+  ['domingo 06:00 (ya es otro día) → domingo', '2026-08-30T06:00:00', '2026-08-30'],
+]
+
+for (const [etiqueta, local, esperado] of casosFecha) {
+  const abierto = horaLocal(local)
+  const t = await api('POST', '/api/collections/turnos/records', {
+    token: admin.token,
+    // se manda una fecha DELIBERADAMENTE equivocada: el server tiene que pisarla
+    body: { fecha: abierto, abierto_at: abierto, cerrado_at: abierto, abierto_por: cajero.record.id },
+  })
+  ok('[TURNO-AUTO] ' + etiqueta, t.status === 200 && soloDia(t.body.fecha) === esperado,
+    t.status === 200 ? 'quedó ' + soloDia(t.body.fecha) : msg(t))
+  if (t.status === 200) await api('DELETE', '/api/collections/turnos/records/' + t.body.id, { token: admin.token })
+}
+
+// Auto-apertura: sin ningún turno abierto, el endpoint lo crea
+await limpiarTodo()
+const turnosAntes = await api('GET', '/api/collections/turnos/records', { token: admin.token })
+ok('[TURNO-AUTO] partimos sin ningún turno', turnosAntes.body.totalItems === 0,
+  'hay ' + turnosAntes.body.totalItems)
+
+const autoUno = await api('POST', '/api/tragos/turno', { token: cajero.token })
+ok('[TURNO-AUTO] el endpoint crea el turno si no hay', autoUno.status === 200 && autoUno.body.creado === true,
+  msg(autoUno))
+
+// Idempotente: llamarlo de nuevo devuelve el MISMO, no crea otro
+const autoDos = await api('POST', '/api/tragos/turno', { token: cajero.token })
+ok('[TURNO-AUTO] llamarlo de nuevo devuelve el mismo turno',
+  autoDos.status === 200 && autoDos.body.id === autoUno.body.id && autoDos.body.creado === false,
+  msg(autoDos))
+
+// La carrera: dos cajas apretando COBRAR al mismo tiempo NO abren dos turnos
+await limpiarTodo()
+const carrera = await Promise.all([
+  api('POST', '/api/tragos/turno', { token: cajero.token }),
+  api('POST', '/api/tragos/turno', { token: jefe.token }),
+  api('POST', '/api/tragos/turno', { token: cajero.token }),
+])
+const turnosTrasCarrera = await api('GET', '/api/collections/turnos/records', { token: admin.token })
+ok('[TURNO-AUTO] 3 llamadas simultáneas abren UN SOLO turno (agujero #9)',
+  turnosTrasCarrera.body.totalItems === 1,
+  'quedaron ' + turnosTrasCarrera.body.totalItems)
+ok('[TURNO-AUTO] las 3 devuelven el mismo id',
+  new Set(carrera.filter((r) => r.status === 200).map((r) => r.body.id)).size === 1,
+  carrera.map((r) => r.status === 200 ? r.body.id : msg(r)).join(' | '))
+
+// El turno auto-abierto sirve para vender de verdad
+const turnoAuto = turnosTrasCarrera.body.items[0]
+const ordenAuto = (await api('POST', '/api/collections/ordenes/records', {
+  token: cajero.token,
+  body: { turno_id: turnoAuto.id, estado: 'borrador', cajero_id: cajero.record.id, metodo_pago: 'efectivo' },
+})).body
+await api('POST', '/api/collections/orden_items/records', {
+  token: cajero.token,
+  body: { orden_id: ordenAuto.id, producto_id: fernet.id, estado: 'pendiente' },
+})
+const cobroAuto = await api('POST', '/api/tragos/cobrar', {
+  token: cajero.token, body: { orden_id: ordenAuto.id, metodo_pago: 'efectivo' },
+})
+ok('[TURNO-AUTO] se puede cobrar contra el turno auto-abierto',
+  cobroAuto.status === 200 && cobroAuto.body.numero === 1, msg(cobroAuto))
+
+// Un barman no abre turnos, ni por el endpoint nuevo
+const turnoBarmanAuto = await api('POST', '/api/tragos/turno', { token: barman.token })
+ok('[TURNO-AUTO] el barman NO puede abrir turno por el endpoint',
+  turnoBarmanAuto.status === 403, msg(turnoBarmanAuto))
+
+// ═══════════════════════════════════════════════════════════════
 titulo('13 · Limpieza')
 await limpiarTodo()
 const quedanOrdenes = await api('GET', '/api/collections/ordenes/records', { token: admin.token })

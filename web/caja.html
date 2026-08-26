@@ -25,19 +25,10 @@
       SIN CONEXIÓN CON EL SERVIDOR — pasá al talonario de papel
     </div>
 
-    <!-- Sin turno abierto no se puede vender -->
-    <div id="sin-turno" class="columna" style="flex:1;align-items:center;justify-content:center;gap:18px;padding:24px">
-      <div class="vacio" style="padding:0">
-        No hay ningún turno abierto.<br>
-        Abrí uno para empezar a cobrar.
-      </div>
-      <button class="btn btn-accion btn-grande" id="btn-abrir-turno" style="max-width:320px">
-        Abrir turno
-      </button>
-    </div>
-
-    <!-- Pantalla de venta -->
-    <div class="cuerpo" id="con-turno" style="display:none">
+    <!-- [TURNO-AUTO] La caja siempre puede vender: si no hay turno abierto,
+         el primer cobro lo abre solo. Antes acá había un cartel que tapaba
+         todo hasta que alguien se acordara de apretar "Abrir turno". -->
+    <div class="cuerpo" id="con-turno">
       <div class="columna" style="flex:1">
         <div class="tabs" id="tabs"></div>
         <div class="scroll">

@@ -91,7 +91,8 @@ const pintarCarrito = () => {
   }
 
   $('#total').textContent = plata(totalCarrito())
-  $('#btn-cobrar').disabled = !estado.carrito.length || estado.cobrando || !estado.turno
+  // [TURNO-AUTO] Ya no exige turno: si no hay, el cobro lo abre solo.
+  $('#btn-cobrar').disabled = !estado.carrito.length || estado.cobrando
   $('#btn-vaciar').style.visibility = estado.carrito.length ? 'visible' : 'hidden'
 }
 
@@ -117,10 +118,16 @@ const pintarOrdenes = () => {
     </div>`).join('')
 }
 
+/**
+ * [TURNO-AUTO] La caja SIEMPRE muestra el menú, haya turno o no.
+ *
+ * Antes, sin turno abierto, tapaba todo con un cartel y un botón. Ahora el
+ * turno se abre solo al cobrar: nadie tiene que acordarse de nada a la 01:00
+ * con gente esperando. El botón de cerrar sólo aparece si hay algo que cerrar.
+ */
 const pintarTurno = () => {
   const hay = !!estado.turno
-  $('#sin-turno').style.display = hay ? 'none' : 'flex'
-  $('#con-turno').style.display = hay ? 'flex' : 'none'
+  $('#con-turno').style.display = 'flex'
   $('#btn-cerrar-turno').style.display = hay ? 'inline-flex' : 'none'
   pintarCarrito()
 }
@@ -153,23 +160,27 @@ const cargarOrdenes = async () => {
 
 // ── Turno ────────────────────────────────────────────────────
 
-const abrirTurno = async () => {
-  const ahora = new Date().toISOString()
-  const r = await PB.pedir('POST', '/api/collections/turnos/records', {
-    fecha: ahora,
-    abierto_at: ahora,
-    abierto_por: PB.staff.id,
-  })
+/**
+ * [TURNO-AUTO] Se asegura de que haya un turno abierto, creándolo si hace falta.
+ *
+ * La fecha del turno la calcula el SERVER (`abierto_at` menos 6 horas), no
+ * esta pantalla: si saliera del reloj, la venta del sábado a la noche
+ * figuraría como domingo. Por eso ya no se manda `fecha` desde acá.
+ *
+ * Devuelve el turno, o null si falló (ya avisó el error).
+ */
+const asegurarTurno = async () => {
+  const r = await PB.pedir('POST', '/api/tragos/turno')
   if (!r.ok) {
     UI.avisar(r.mensaje, 'mala')
-    // pudo abrirlo otra caja: recargamos por las dudas
-    await buscarTurnoAbierto()
-    return
+    return null
   }
-  estado.turno = r.datos
-  pintarTurno()
-  await cargarOrdenes()
-  UI.avisar('Turno abierto', 'buena')
+
+  // El endpoint devuelve lo mínimo; para el resto de la pantalla queremos el
+  // registro completo.
+  await buscarTurnoAbierto()
+  if (r.datos.creado) UI.avisar('Turno abierto', 'buena')
+  return estado.turno
 }
 
 const cerrarTurno = async () => {
@@ -280,11 +291,15 @@ const crearOrden = async () => {
 }
 
 const cobrar = async () => {
-  if (estado.cobrando || !estado.carrito.length || !estado.turno) return
+  if (estado.cobrando || !estado.carrito.length) return
   estado.cobrando = true
   pintarCarrito()
 
   try {
+    // [TURNO-AUTO] Si es el primer cobro de la noche, el turno se abre acá.
+    // El cajero no tiene que acordarse de nada.
+    if (!estado.turno && !(await asegurarTurno())) return
+
     // Si quedó un cobro a medias de un intento anterior, se retoma ese.
     let ordenId = localStorage.getItem(CLAVE_COBRO_PENDIENTE)
     if (!ordenId) {
@@ -393,7 +408,6 @@ const engancharEventos = () => {
   }
 
   $('#btn-cobrar').onclick = cobrar
-  $('#btn-abrir-turno').onclick = abrirTurno
   $('#btn-cerrar-turno').onclick = cerrarTurno
 
   $('#btn-vaciar').onclick = async () => {

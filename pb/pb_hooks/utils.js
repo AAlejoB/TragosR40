@@ -12,6 +12,44 @@
 const TIMEOUT_MIN = 8
 const MOTIVOS_ANULAR = ['se_cayo', 'cliente_se_fue', 'error_carga', 'sin_stock', 'otro']
 
+/**
+ * [TURNO-AUTO] La noche pertenece al dia en que ARRANCO, no al del reloj.
+ *
+ * El boliche abre 01:00 del sabado y cierra 06:00 del domingo. Si la fecha del
+ * turno saliera del reloj, toda la venta del sabado a la noche figuraria como
+ * domingo y el arqueo del sabado saldria vacio.
+ *
+ * Todo lo que pasa antes de las 6 de la mañana cuenta como el dia anterior.
+ */
+const HORAS_CORTE = 6
+
+/**
+ * Comodoro Rivadavia esta en UTC-3, todo el año (Argentina no cambia la hora
+ * desde 2009). Hace falta explicito porque el server guarda en UTC: si el
+ * corte se hiciera sobre UTC, a las 05:00 de la madrugada daria el dia
+ * EQUIVOCADO, que es justo el caso que esto viene a arreglar.
+ */
+const UTC_OFFSET_LOCAL = -3
+
+/**
+ * Devuelve la fecha (sin hora) a la que pertenece un turno abierto en `abiertoAt`.
+ *
+ * Se resta el offset local Y las horas de corte de una sola vez: pasar a hora
+ * local y despues restar 6 es lo mismo que restar 9 sobre UTC.
+ *
+ * Devuelve un string 'YYYY-MM-DD 00:00:00.000Z', o null si la fecha no parsea.
+ */
+function fechaDeTurno(abiertoAt) {
+  const ms = new Date(String(abiertoAt).replace(' ', 'T')).getTime()
+  if (isNaN(ms)) return null
+
+  const corrido = new Date(ms + (UTC_OFFSET_LOCAL - HORAS_CORTE) * 3600000)
+  const y = corrido.getUTCFullYear()
+  const m = String(corrido.getUTCMonth() + 1).padStart(2, '0')
+  const d = String(corrido.getUTCDate()).padStart(2, '0')
+  return y + '-' + m + '-' + d + ' 00:00:00.000Z'
+}
+
 const TRANSICIONES = {
   pendiente: ['preparando'],
   preparando: ['listo'],
@@ -104,6 +142,9 @@ function responder(e, fn) {
 
 module.exports = {
   sinFecha,
+  fechaDeTurno,
+  HORAS_CORTE,
+  UTC_OFFSET_LOCAL,
   TIMEOUT_MIN,
   MOTIVOS_ANULAR,
   TRANSICIONES,

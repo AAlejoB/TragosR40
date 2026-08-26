@@ -23,6 +23,7 @@
 | 25 ago 2026 | **Bloque 5** — red de seguridad contra el realtime zombi, latencia medida (**27 ms**), y `gestion.html`: el jefe edita su menú y sus precios sin tocar el panel técnico. |
 | 25 ago 2026 | **Bloque 6** — `panel.html`: reportes para el dueño (venta por hora, ranking de tragos, aviso de silencio). Cerró la duda de "varios locales": lo que pedía Alejo no era eso. Ver `DECISION-MULTILOCAL.md`. |
 | 26 ago 2026 | **Bloque 7 — [PODA]** — brief del Chat. Se saca `cantidad` (una fila por trago), la orden pasa de 6 estados a 3, `metodo_pago` obligatorio, y `grupo`/`etiqueta` para los vasos de ½ L y 1 L. La suite pasó de 92 a **111 chequeos, 0 fallas**. |
+| 26 ago 2026 | **Bloque 8 — [TURNO-AUTO]** — el turno se abre solo en el primer cobro, y su fecha se calcula restando 6 horas: la venta del sábado a la noche ya no figura como domingo. **123 chequeos, 0 fallas**. |
 
 ---
 
@@ -615,6 +616,70 @@ pedía el brief, y el cron también.
 
 ---
 
+### Bloque 8 — [TURNO-AUTO] (26 ago 2026)
+
+>CLCODE<
+
+Los puntos 6 y 7 que [PODA] había dejado documentados sin implementar.
+
+**1 · La fecha del turno = `abierto_at` − 6 horas**
+
+El boliche abre 01:00 del sábado y cierra 06:00 del domingo. Con la fecha del
+reloj, toda la venta del sábado a la noche figuraba como domingo y el arqueo
+del sábado salía vacío.
+
+**La trampa que casi se come el arreglo:** el server guarda en UTC y Comodoro
+está en UTC−3. Restar 6 horas sobre UTC da el día EQUIVOCADO justo en la
+madrugada. Un cobro a las 05:59 del domingo (hora local) es 08:59 UTC; restando
+6 quedan las 02:59 del domingo → domingo. Mal: esa venta es del sábado.
+
+La cuenta correcta es **restar 9 horas** (3 de zona + 6 de corte). Se verificó
+con los 5 horarios reales del local antes de escribir nada encima:
+
+| Hora local | Fecha del turno |
+|---|---|
+| sábado 22:00 | sábado ✓ |
+| domingo 01:00 (el horario real) | sábado ✓ |
+| domingo 03:30 (pico de venta) | sábado ✓ |
+| domingo 05:59 (último trago) | sábado ✓ |
+| domingo 06:00 | domingo ✓ |
+
+Argentina no cambia la hora desde 2009, así que el offset fijo es seguro. Si
+algún día vuelve el horario de verano, esto hay que revisarlo — está anotado
+en `utils.js`.
+
+**La calcula el server en dos lugares**, para que valga por cualquier vía: el
+endpoint nuevo y una guarda en el create de `turnos` que **pisa** la `fecha`
+que venga de la pantalla. Se probó mandando a propósito una fecha equivocada:
+el server la corrige.
+
+**2 · `POST /api/tragos/turno` — el turno se abre solo**
+
+Es *conseguir-o-crear*: devuelve el turno abierto, y si no hay ninguno lo crea.
+Idempotente — llamarlo diez veces devuelve el mismo.
+
+**Por qué es un endpoint aparte y no parte de `cobrar`,** como sugería el
+brief: una orden necesita `turno_id` para poder existir, así que el turno tiene
+que estar **antes** de crear la orden. Meterlo dentro de `cobrar` habría
+llegado tarde.
+
+La búsqueda y la creación van en la **misma transacción**. Se verificó con 3
+llamadas simultáneas: abren un solo turno y las tres devuelven el mismo id.
+Es el agujero #9 otra vez, ahora también por esta vía.
+
+**3 · La caja ya no bloquea la venta**
+
+Antes, sin turno abierto, un cartel tapaba el menú hasta que alguien apretara
+"Abrir turno". Ahora el menú está siempre y el primer COBRAR abre el turno
+solo. El botón de cerrar aparece únicamente si hay algo que cerrar.
+
+Probado de punta a punta en el navegador: se entró a la caja **sin ningún turno
+en la base**, se cargaron dos tragos y se cobró — apareció el número 1 y el
+turno se creó solo. Después se cerró el turno y se vendió de nuevo: se abrió
+uno nuevo y el número volvió a 1, que es el reseteo por turno funcionando.
+
+---
+
 ## 🔑 Keywords
 
 >CLCODE<
@@ -909,13 +974,13 @@ sale más barato que un arqueo que no cierra.
    que el brief de [PODA] dejaba para el bloque siguiente.
 2. **`[BOTON-PARTIDO]`** — dibujar `grupo`/`etiqueta` en `caja.html`. El schema
    quedó listo en [PODA]; falta sólo la pantalla.
-3. **Service Worker + manifest (PWA).** Lo único que falta para que las tablets
+2. **Service Worker + manifest (PWA).** Lo único que falta para que las tablets
    aguanten un corte del server sin quedar en blanco. **Sonnet 5.**
-4. **Probar en las tablets reales, en el local, con la WiFi de verdad.** Todo
+3. **Probar en las tablets reales, en el local, con la WiFi de verdad.** Todo
    está probado en una notebook contra `localhost`.
-5. Plan B: impresora térmica y carga manual en papel.
-6. **Decidir el hardware del server.** Ver el riesgo del reloj en Decisiones.
-7. **La marca del local** — el nombre en las pantallas (hoy `[NOMBRE DEL LOCAL]`).
+4. Plan B: impresora térmica y carga manual en papel.
+5. **Decidir el hardware del server.** Ver el riesgo del reloj en Decisiones.
+6. **La marca del local** — el nombre en las pantallas (hoy `[NOMBRE DEL LOCAL]`).
 
 ### Reglas de oro al arrancar
 

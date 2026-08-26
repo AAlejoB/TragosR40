@@ -70,7 +70,7 @@ Si una feature necesita internet para funcionar durante la noche, está mal dise
 tragos/
 ├── .gitignore
 ├── arrancar.cmd            ← Doble clic: prende el servidor
-├── verificar.cmd           ← Doble clic: corre los 111 chequeos
+├── verificar.cmd           ← Doble clic: corre los 123 chequeos
 ├── pb/                     ← PocketBase (ejecutable + pb_data + pb_migrations)
 │   ├── pocketbase(.exe)    ← v0.40.1. NO commitear (33 MB) — ver pb/README.md
 │   ├── pb_data/            ← SQLite. NO commitear
@@ -78,7 +78,7 @@ tragos/
 │   ├── pb_hooks/           ← Reglas de negocio del server
 │   │   ├── main.pb.js      ← Endpoints, guardas, derivación y cron
 │   │   └── utils.js        ← Helpers (NO .pb.js: es módulo, no hook)
-│   ├── verificar.mjs       ← Suite de 111 chequeos (node, sin deps)
+│   ├── verificar.mjs       ← Suite de 123 chequeos (node, sin deps)
 │   └── README.md           ← Cómo instalar y arrancar PocketBase
 ├── web/                    ← Lo sirve PocketBase (--publicDir en arrancar.cmd)
 │   ├── index.html          ← Elegí pantalla: caja o barra
@@ -173,7 +173,7 @@ Conviven dos estilos en `pb/pb_hooks/`. La regla para elegir:
 > personas pueden hacerla sobre lo mismo al mismo tiempo.
 > **Guarda** (`onRecordUpdateRequest`) si es un campo y un actor.
 
-Hoy son operación: `cobrar`, `claim`, `anular`. Son guarda: las transiciones
+Hoy son operación: `turno`, `cobrar`, `claim`, `anular`. Son guarda: las transiciones
 `listo` y `entregado`, el precio congelado y el turno único.
 
 ### Migraciones
